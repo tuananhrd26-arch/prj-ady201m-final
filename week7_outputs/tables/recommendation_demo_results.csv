@@ -1,0 +1,51 @@
+﻿input_song,input_artists,rank,recommended_song,recommended_artists,year,popularity,similarity
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",1,"Piano Concerto No. 3 in D Minor, Op. 30: III. Finale. Alla breve","['Sergei Rachmaninoff', 'James Levine', 'Berliner Philharmoniker']",1921,1,1.0
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",2,"Polonaise-Fantaisie in A-Flat, Op.61","['Frédéric Chopin', 'William Kapell']",1945,0,0.9973
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",3,"Polonaise-Fantaisie in A-Flat, Op.61","['Frédéric Chopin', 'William Kapell']",1945,0,0.9973
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",4,Concert for piano and orchestra: III. Phantaisie Pathetique,"['Howard Shelly', 'Kurt Graunke']",1936,0,0.9973
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",5,"Ballade No. 1 in G Minor, Op. 23","['Frédéric Chopin', 'Vladimir Horowitz']",1928,11,0.9971
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",6,Stravinsky: Le sacre du printemps (The Rite of Spring): Le sacre du printemps: The Sacrifice: Mystic Circles of the Young Girls,"['Igor Stravinsky', 'Eugene Ormandy']",1948,0,0.9949
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",7,"Années de pèlerinage, Première année (Suisse), S. 160: No. 6, Vallée d'Obermann","['Franz Liszt', 'Vladimir Horowitz']",1930,14,0.9948
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",8,"Nocturne in E Minor, Op. 72, No. 1","['Frédéric Chopin', 'Vladimir Horowitz']",1928,2,0.9931
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",9,"Ballade No. 1 in G Minor, Op. 23","['Frédéric Chopin', 'Vladimir Horowitz']",1965,25,0.9902
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",10,"Années de pèlerinage II (Italie), S. 161: No. 5, Sonetto del Petrarca No. 104 - Live","['Franz Liszt', 'Vladimir Horowitz']",1930,10,0.9892
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",1,strangers,"['biosphere', 'CIKI', 'Chris Wright', 'love-sadKID']",2017,60,0.9773
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",2,The Snake,"['Oscar Brown, Jr.']",1963,18,0.9734
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",3,Slogan Song,"['Phil Silvers', 'Rosemarie', 'Jack Albertson']",1952,0,0.9709
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",4,Mark On The Bus - Remastered 2009,['Beastie Boys'],1992,32,0.9653
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",5,Yeh Kab Tak Chalegi Chori,['Indrabadan Bhatt'],1947,0,0.9607
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",6,La Bonne Cuisine (Four Recipes): I. Plum Pudding,['Leonard Bernstein'],1950,0,0.9606
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",7,"Civilization (Bongo, Bongo, Bongo) - Single Version","['Danny Kaye', 'The Andrews Sisters', 'Vic Schoen & His Orchestra']",1987,46,0.9549
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",8,Qu'est Ce Qu'il Faut Faire Pour Gagner Son Beefsteak,['Georgius'],1927,0,0.9476
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",9,Dhaan Ke Khet Mein Na Jaiyo,['Zeenat Begum'],1944,0,0.9455
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",10,Iravile Vandhaan Inba Sugam Thandhu,['M. S. Rajeswari'],1948,0,0.9447
+Dynamite,['BTS'],1,Moghaddameye Segah,['Mohammadreza Shajarian'],1988,25,0.9967
+Dynamite,['BTS'],2,Blue Satin,['Henry Mancini'],1960,14,0.9957
+Dynamite,['BTS'],3,Gati Kumencar,['KHP Kridhamardawa Karaton Ngayogyakarta Hadiningrat'],1921,1,0.9955
+Dynamite,['BTS'],4,"Concerto No. 2 in B-Flat Major, Op. 83: I. Allegro non troppo","['Johannes Brahms', 'Arthur Rubinstein', 'Charles Münch']",1951,0,0.9952
+Dynamite,['BTS'],5,"Piano Concerto, Op. 16 (Remastered): I. Allegro molto moderato","['Edvard Grieg', 'Oscar Levant', 'Efrem Kurtz', 'New York Philharmonic']",1942,0,0.9944
+Dynamite,['BTS'],6,"Piano Concerto No. 2 in B-Flat Major, Op. 83: I. Allegro non troppo","['Johannes Brahms', 'Eugene Ormandy', 'Philadelphia Orchestra']",1951,0,0.9944
+Dynamite,['BTS'],7,Overture,"['Ambroise Thomas', 'Arturo Toscanini']",1952,0,0.9939
+Dynamite,['BTS'],8,"Symphony No. 9 in C Major, D. 944 - ""The Great"": 1. Andante - Allegro ma non troppo","['Franz Schubert', 'Berliner Philharmoniker', 'Wilhelm Furtwängler']",1952,2,0.9937
+Dynamite,['BTS'],9,"Symphony No. 4 in E Minor, Op. 98: IV. Allegro energico e passionata","['Johannes Brahms', 'Arturo Toscanini']",1951,0,0.9937
+Dynamite,['BTS'],10,"Symphony No. 4 in C Minor, D. 417, ""Tragic"": I. Adagio molto - Allegro vivace","['Franz Schubert', 'Sir John Barbirolli', 'New York Philharmonic']",1939,0,0.9935
+Blinding Lights,['The Weeknd'],1,What Kind of Fool Am I,['Sammy Davis Jr.'],1962,43,0.996
+Blinding Lights,['The Weeknd'],2,Vehu Rachum (Evening Prayer) - Voice,"['ZAVEL ZILBERTS', 'Richard Tucker', 'Sholom Secunda']",1953,0,0.9937
+Blinding Lights,['The Weeknd'],3,"Der fliegende Holländer, WWV 63 / Act 1: 1. Introduktion. ""Hojoje! Hojoje! Hallojo! Ho!""","['Richard Wagner', 'RIAS-Symphonie-Orchester', 'Ferenc Fricsay', 'RIAS Kammerchor']",1953,0,0.9883
+Blinding Lights,['The Weeknd'],4,Mil Violines,['Chucho Avellanet'],1965,27,0.9879
+Blinding Lights,['The Weeknd'],5,Yehi Rotzon (Blessing of the Month),"['Sholom Secunda', 'Richard Tucker']",1950,0,0.9875
+Blinding Lights,['The Weeknd'],6,Someone to Watch over Me - Remastered,"['Frank Sinatra', 'Axel Stordahl Orchestra']",1946,24,0.9843
+Blinding Lights,['The Weeknd'],7,Mori koumpara Giorgaina,['Filio Pirgaki'],1950,0,0.9843
+Blinding Lights,['The Weeknd'],8,Autumn Leaves - Remastered,['Nat King Cole'],1987,53,0.9839
+Blinding Lights,['The Weeknd'],9,Act I: Che gelida manina,"['Giacomo Puccini', 'Mario Lanza', 'Constantine Callinicos']",1949,1,0.9837
+Blinding Lights,['The Weeknd'],10,I Need,['Ella Fitzgerald'],1955,9,0.9827
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",1,Ne me quitte pas,['Jacques Brel'],2004,58,0.9832
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",2,月夜愁,['紫薇'],1963,25,0.9832
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",3,Tudo isto é fado,['Amália Rodrigues'],1952,10,0.9824
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",4,God Bless The Child,['Billie Holiday'],1956,47,0.9804
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",5,"Don't Say Goodnight (It's Time for Love), Pts. 1 & 2",['The Isley Brothers'],1980,41,0.9795
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",6,Have Mercy,['The Platters'],1956,14,0.9793
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",7,Dimmi Un Po’ Si Sinatra,"['Armando Trovajoli', 'T.Giacobetti']",1945,4,0.9767
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",8,Sealed with a Kiss,['The Happenings'],1966,16,0.9746
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",9,Un baiser qui n'en finit plus,['Suzy Delair'],1954,0,0.9733
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",10,A Stranger Called The Blues - Mono,['June Christy'],1955,9,0.9731

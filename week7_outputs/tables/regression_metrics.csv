@@ -1,0 +1,5 @@
+﻿model,feature_set,MAE,RMSE,R2
+Linear Regression,Audio Only,13.1118,16.308,0.4442
+Ridge Regression,Audio Only,13.1119,16.308,0.4442
+Linear Regression,Extended,7.982,10.7308,0.7594
+Ridge Regression,Extended,7.9821,10.7309,0.7594

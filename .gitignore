@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+pyvenv.cfg
+
+# Local editor / agent files
+.agents/
+.vscode/
+.idea/
+
+# Raw data and old outputs
+data/
+eda_outputs/
+report_figures/
+model_artifacts_v2/
+prepared_model_dataset.csv
+test.py
+
+# Generated model artifacts
+*.joblib
+week7_outputs/model_artifacts/
+
+# Optional SQL reference outputs
+week7_outputs/sql/
+
+# OS files
+.DS_Store
+Thumbs.db

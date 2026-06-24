@@ -1,0 +1,63 @@
+{
+  "run_started_at": "2026-06-24T15:16:39+07:00",
+  "run_completed_at": "2026-06-24T15:16:51+07:00",
+  "run_duration_seconds": 12.16,
+  "input_files": {
+    "tracks": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_clean.csv",
+    "artist_features": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_by_artist_clean.csv",
+    "genre_features": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_by_genres_clean.csv",
+    "year_features": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_by_year_clean.csv",
+    "artist_genres": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_w_genres_clean.csv"
+  },
+  "main_dataset_rows": 170653,
+  "main_dataset_columns": 21,
+  "tables_folder": "D:\\spotify-recommendation-analytics\\week7_outputs\\tables",
+  "figures_folder": "D:\\spotify-recommendation-analytics\\week7_outputs\\figures",
+  "sql_folder": "D:\\spotify-recommendation-analytics\\week7_outputs\\sql",
+  "model_artifacts_folder": "D:\\spotify-recommendation-analytics\\week7_outputs\\model_artifacts",
+  "tables_created": [
+    "audio_feature_trends_by_year.csv",
+    "correlation_matrix.csv",
+    "dataset_overview.csv",
+    "decade_feature_summary.csv",
+    "descriptive_statistics.csv",
+    "genre_decade_popularity_pivot.csv",
+    "missing_values_after_cleaning.csv",
+    "recommendation_demo_results.csv",
+    "regression_actual_vs_predicted.csv",
+    "regression_coefficients.csv",
+    "regression_metrics.csv",
+    "top_genres_audio_profile.csv",
+    "tracks_by_decade.csv"
+  ],
+  "figures_created": [
+    "audio_feature_trends_by_year.png",
+    "correlation_heatmap.png",
+    "popularity_by_decade_boxplot.png",
+    "popularity_distribution.png",
+    "regression_actual_vs_predicted.png",
+    "regression_coefficients.png",
+    "regression_residuals.png",
+    "tracks_by_decade.png"
+  ],
+  "models_trained": [
+    "Audio Only - Linear Regression",
+    "Audio Only - Ridge Regression",
+    "Extended - Linear Regression",
+    "Extended - Ridge Regression"
+  ],
+  "best_regression_model_by_R2": {
+    "model": "Linear Regression",
+    "feature_set": "Extended",
+    "R2": 0.7594
+  },
+  "regression_plot_model": {
+    "model": "Ridge Regression",
+    "feature_set": "Extended"
+  },
+  "sql_reference_executed": false,
+  "notes": [
+    "Genre pivot created for the 30 genres with the most track-artist matches.",
+    "SQLite/SQL outputs are optional reference outputs. The group's main SQL work is completed separately in SQL Server Management Studio."
+  ]
+}
