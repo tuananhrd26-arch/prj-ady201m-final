@@ -778,6 +778,7 @@ def build_recommender_demo(
             for row in input_rows
         ]
         expected_ranks = list(range(1, len(input_rows) + 1))
+        exact_top_n = len(input_rows) == n_neighbors
         input_track_absent = input_key not in recommended_keys
         no_duplicate_recommendations = len(recommended_keys) == len(set(recommended_keys))
         rank_consecutive = ranks == expected_ranks
@@ -791,6 +792,7 @@ def build_recommender_demo(
                 similarity_formula_valid,
                 finite_similarity,
                 rank_consecutive,
+                exact_top_n,
             ]
         )
         validation_rows.append(
@@ -805,6 +807,7 @@ def build_recommender_demo(
                 "similarity_formula_valid": similarity_formula_valid,
                 "finite_similarity": finite_similarity,
                 "rank_consecutive": rank_consecutive,
+                "exact_top_n": exact_top_n,
                 "validation_passed": validation_passed,
             }
         )
