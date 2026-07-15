@@ -1,8 +1,10 @@
 # Python cache
 __pycache__/
+*.py[cod]
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 .ipynb_checkpoints/
 
 # Virtual environments
@@ -15,6 +17,7 @@ pyvenv.cfg
 .agents/
 .vscode/
 .idea/
+.audit_outputs/
 
 # Raw data and old outputs
 data/
@@ -27,6 +30,14 @@ test.py
 # Generated model artifacts
 *.joblib
 week7_outputs/model_artifacts/
+
+# Preserved local report deliverables and source backups
+report_package/
+report_package_updated/
+report_tables/
+spotify_report_package.zip
+spotify_report_package_updated.zip
+spotify_week7_analysis_before_report_fix.py
 
 # Optional SQL reference outputs
 week7_outputs/sql/
