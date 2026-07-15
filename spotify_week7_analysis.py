@@ -40,6 +40,7 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.express as px
 from sklearn.base import clone
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -271,6 +272,52 @@ def plot_correlation_heatmap(tracks: pd.DataFrame, features: List[str], fig_path
     return corr.reset_index().rename(columns={"index": "feature"})
 
 
+def plot_interactive_energy_loudness(
+    tracks: pd.DataFrame,
+    html_path: Path,
+    preview_path: Path,
+    sample_size: int = 10000,
+) -> str:
+    required_cols = ["energy", "loudness", "decade", "name", "artists", TARGET, "year", "danceability"]
+    missing_cols = [col for col in required_cols if col not in tracks.columns]
+    if missing_cols:
+        return "Interactive Plotly scatter skipped: missing columns " + ", ".join(missing_cols)
+
+    plot_df = tracks.dropna(subset=required_cols).copy()
+    if plot_df.empty:
+        return "Interactive Plotly scatter skipped: no complete rows available."
+
+    if len(plot_df) > sample_size:
+        plot_df = plot_df.sample(sample_size, random_state=RANDOM_STATE)
+
+    plot_df["decade"] = plot_df["decade"].astype(int).astype(str)
+    fig = px.scatter(
+        plot_df,
+        x="energy",
+        y="loudness",
+        color="decade",
+        hover_data=["name", "artists", TARGET, "year", "danceability"],
+        title="Interactive Energy vs Loudness by Decade",
+        labels={
+            "energy": "Energy",
+            "loudness": "Loudness",
+            "decade": "Decade",
+            TARGET: "Popularity",
+        },
+    )
+    fig.write_html(html_path, include_plotlyjs="cdn")
+
+    try:
+        fig.write_image(preview_path, width=1200, height=800, scale=2)
+    except Exception as exc:
+        return (
+            "Interactive Plotly HTML created; static PNG preview unavailable. "
+            f"Plotly image export requires Kaleido and compatible browser support. Error: {exc}"
+        )
+
+    return "Interactive Plotly HTML and static PNG preview created successfully."
+
+
 def parse_artist_names(value: Any) -> List[str]:
     """Convert the serialized artist list in the track data to clean names."""
     if isinstance(value, list):
@@ -408,6 +455,29 @@ def create_eda_outputs(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> pd
     corr = plot_correlation_heatmap(tracks, corr_features, paths.figures / "correlation_heatmap.png")
     save_table(corr.round(4), paths.tables / "correlation_matrix.csv")
 
+    if {"decade", "explicit"}.issubset(tracks.columns):
+        decade_explicit_summary = (
+            tracks.groupby(["decade", "explicit"])
+            .agg(
+                total_tracks=(TARGET, "size"),
+                average_popularity=(TARGET, "mean"),
+                average_energy=("energy", "mean"),
+                average_danceability=("danceability", "mean"),
+                average_acousticness=("acousticness", "mean"),
+            )
+            .round(4)
+        )
+        save_table(
+            decade_explicit_summary.reset_index(),
+            paths.tables / "decade_explicit_multiindex_summary.csv",
+        )
+
+    tracks.attrs["interactive_plot_note"] = plot_interactive_energy_loudness(
+        tracks,
+        paths.figures / "interactive_energy_loudness.html",
+        paths.figures / "interactive_energy_loudness_preview.png",
+    )
+
     if "genre_features" in data:
         genre_df = data["genre_features"].copy()
         genre_name_col = "genres_clean" if "genres_clean" in genre_df.columns else "genres"
@@ -531,17 +601,8 @@ def regression_analysis(
     if not fitted_results:
         raise RuntimeError("Regression model was not fitted correctly.")
 
-    preferred_results = [
-        result
-        for result in fitted_results
-        if result["feature_set"] == "Extended"
-        and result["model"] == "Ridge Regression"
-    ]
-    selected_result = (
-        preferred_results[0]
-        if preferred_results
-        else max(fitted_results, key=lambda result: result["r2"])
-    )
+    best_result = max(fitted_results, key=lambda result: result["r2"])
+    selected_result = best_result
     selected_model_name = str(selected_result["model"])
     selected_feature_set = str(selected_result["feature_set"])
     selected_label = f"{selected_feature_set} {selected_model_name}"
@@ -551,7 +612,7 @@ def regression_analysis(
 
     joblib.dump(
         selected_pipeline,
-        paths.model_artifacts / "ridge_popularity_model.joblib",
+        paths.model_artifacts / "best_popularity_model.joblib",
     )
 
     # Actual vs predicted plot.
@@ -600,7 +661,6 @@ def regression_analysis(
     plt.savefig(paths.figures / "regression_coefficients.png", dpi=180)
     plt.close()
 
-    best_result = max(fitted_results, key=lambda result: result["r2"])
     return {
         "models_trained": [
             f"{row['feature_set']} - {row['model']}"
@@ -619,20 +679,27 @@ def regression_analysis(
     }
 
 
-def build_recommender_demo(tracks: pd.DataFrame, paths: ProjectPaths, n_examples: int = 5, n_neighbors: int = 10) -> None:
+def build_recommender_demo(
+    tracks: pd.DataFrame,
+    paths: ProjectPaths,
+    n_examples: int = 5,
+    n_neighbors: int = 10,
+) -> Dict[str, Any]:
     features = [feature for feature in RECOMMENDER_FEATURES if feature in tracks.columns]
     required_cols = ["name", "artists"] + features
     if "name" not in tracks.columns or "artists" not in tracks.columns:
-        return
+        return {"status": "skipped", "reason": "Missing name or artists columns."}
 
     model_df = tracks.dropna(subset=required_cols).copy().reset_index(drop=True)
     if model_df.empty:
-        return
+        return {"status": "skipped", "reason": "No complete recommendation rows."}
+    model_df["_model_index"] = model_df.index
 
     scaler = StandardScaler()
     X = scaler.fit_transform(model_df[features])
 
-    nn = NearestNeighbors(n_neighbors=n_neighbors + 1, metric="cosine")
+    candidate_count = len(model_df)
+    nn = NearestNeighbors(n_neighbors=candidate_count, metric="cosine")
     nn.fit(X)
 
     joblib.dump(scaler, paths.model_artifacts / "recommender_scaler.joblib")
@@ -643,29 +710,120 @@ def build_recommender_demo(tracks: pd.DataFrame, paths: ProjectPaths, n_examples
         model_df.sort_values(TARGET, ascending=False)
         .drop_duplicates(subset=["name", "artists"])
         .head(n_examples)
-        .reset_index(drop=True)
+        .copy()
     )
 
     rows = []
+    validation_rows = []
     for _, input_row in demo_inputs.iterrows():
-        input_idx = int(input_row.name)
-        distances, indices = nn.kneighbors(X[input_idx].reshape(1, -1), n_neighbors=n_neighbors + 1)
-        for rank, (distance, neighbor_idx) in enumerate(zip(distances[0][1:], indices[0][1:]), start=1):
-            neighbor = model_df.iloc[int(neighbor_idx)]
+        input_idx = int(input_row["_model_index"])
+        query_row = model_df.iloc[input_idx]
+        input_key = (str(input_row["name"]), str(input_row["artists"]))
+        query_key = (str(query_row["name"]), str(query_row["artists"]))
+        label_matches_query_vector = input_key == query_key
+
+        distances, indices = nn.kneighbors(
+            X[input_idx].reshape(1, -1),
+            n_neighbors=candidate_count,
+        )
+
+        seen_recommendations = set()
+        ranks = []
+        formula_checks = []
+        finite_checks = []
+
+        for distance, neighbor_idx in zip(distances[0], indices[0]):
+            neighbor_idx = int(neighbor_idx)
+            if neighbor_idx == input_idx:
+                continue
+
+            neighbor = model_df.iloc[neighbor_idx]
+            recommendation_key = (str(neighbor["name"]), str(neighbor["artists"]))
+            if recommendation_key == input_key or recommendation_key in seen_recommendations:
+                continue
+
+            similarity = 1 - float(distance)
+            formula_checks.append(np.isclose(similarity, 1 - float(distance)))
+            finite_checks.append(np.isfinite(similarity))
+            seen_recommendations.add(recommendation_key)
+            rank = len(seen_recommendations)
+            ranks.append(rank)
+
             rows.append(
                 {
                     "input_song": input_row["name"],
                     "input_artists": input_row["artists"],
+                    "input_model_index": input_idx,
                     "rank": rank,
                     "recommended_song": neighbor["name"],
                     "recommended_artists": neighbor["artists"],
+                    "recommended_model_index": neighbor_idx,
                     "year": neighbor.get("year", np.nan),
                     "popularity": neighbor.get(TARGET, np.nan),
-                    "similarity": 1 - float(distance),
+                    "cosine_distance": float(distance),
+                    "similarity": similarity,
                 }
             )
 
-    save_table(pd.DataFrame(rows).round(4), paths.tables / "recommendation_demo_results.csv")
+            if len(seen_recommendations) >= n_neighbors:
+                break
+
+        input_rows = [
+            row for row in rows
+            if row["input_song"] == input_row["name"]
+            and row["input_artists"] == input_row["artists"]
+        ]
+        recommended_keys = [
+            (str(row["recommended_song"]), str(row["recommended_artists"]))
+            for row in input_rows
+        ]
+        expected_ranks = list(range(1, len(input_rows) + 1))
+        input_track_absent = input_key not in recommended_keys
+        no_duplicate_recommendations = len(recommended_keys) == len(set(recommended_keys))
+        rank_consecutive = ranks == expected_ranks
+        similarity_formula_valid = bool(formula_checks) and all(formula_checks)
+        finite_similarity = bool(finite_checks) and all(finite_checks)
+        validation_passed = all(
+            [
+                label_matches_query_vector,
+                input_track_absent,
+                no_duplicate_recommendations,
+                similarity_formula_valid,
+                finite_similarity,
+                rank_consecutive,
+            ]
+        )
+        validation_rows.append(
+            {
+                "input_song": input_row["name"],
+                "input_artists": input_row["artists"],
+                "input_model_index": input_idx,
+                "recommendations_returned": len(input_rows),
+                "label_matches_query_vector": label_matches_query_vector,
+                "input_track_absent": input_track_absent,
+                "no_duplicate_recommendations": no_duplicate_recommendations,
+                "similarity_formula_valid": similarity_formula_valid,
+                "finite_similarity": finite_similarity,
+                "rank_consecutive": rank_consecutive,
+                "validation_passed": validation_passed,
+            }
+        )
+
+    recommendation_output = pd.DataFrame(rows)
+    validation_output = pd.DataFrame(validation_rows)
+    save_table(recommendation_output.round(4), paths.tables / "recommendation_demo_results.csv")
+    save_table(validation_output, paths.tables / "recommendation_validation.csv")
+
+    return {
+        "status": "created",
+        "features": features,
+        "scaler": "StandardScaler",
+        "metric": "cosine",
+        "requested_unique_recommendations_per_input": n_neighbors,
+        "seed_index_preserved": True,
+        "validation_passed": bool(validation_output["validation_passed"].all()) if not validation_output.empty else False,
+        "validation_file": str(paths.tables / "recommendation_validation.csv"),
+    }
 
 
 def create_sqlite_database(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> Path:
@@ -790,6 +948,7 @@ def write_run_summary(
     input_files: Dict[str, Path],
     tracks: pd.DataFrame,
     regression_summary: Dict[str, Any],
+    recommendation_summary: Dict[str, Any],
     sql_executed: bool,
     run_started_at: datetime,
 ) -> None:
@@ -815,11 +974,18 @@ def write_run_summary(
             path.name for path in sorted(paths.tables.glob("*.csv"))
         ],
         "figures_created": [
-            path.name for path in sorted(paths.figures.glob("*.png"))
+            path.name
+            for path in sorted(paths.figures.iterdir())
+            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg", ".html"}
         ],
         "models_trained": regression_summary["models_trained"],
         "best_regression_model_by_R2": regression_summary["best_model"],
         "regression_plot_model": regression_summary["plot_model"],
+        "recommendation_summary": recommendation_summary,
+        "interactive_plot_note": tracks.attrs.get("interactive_plot_note"),
+        "model_artifacts_created": [
+            path.name for path in sorted(paths.model_artifacts.iterdir()) if path.is_file()
+        ],
         "sql_reference_executed": sql_executed,
         "notes": [
             tracks.attrs.get("genre_pivot_note", "No genre pivot note was recorded."),
@@ -858,7 +1024,7 @@ def main() -> None:
     regression_summary = regression_analysis(tracks, paths)
 
     print("Building recommendation demo outputs...")
-    build_recommender_demo(tracks, paths)
+    recommendation_summary = build_recommender_demo(tracks, paths)
 
     if args.skip_sql:
         print("Skipping optional SQLite/SQL reference outputs...")
@@ -872,6 +1038,7 @@ def main() -> None:
         input_files=input_files,
         tracks=tracks,
         regression_summary=regression_summary,
+        recommendation_summary=recommendation_summary,
         sql_executed=not args.skip_sql,
         run_started_at=run_started_at,
     )
