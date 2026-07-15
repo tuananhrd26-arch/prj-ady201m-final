@@ -1,51 +1,51 @@
-﻿input_song,input_artists,rank,recommended_song,recommended_artists,year,popularity,similarity
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",1,"Piano Concerto No. 3 in D Minor, Op. 30: III. Finale. Alla breve","['Sergei Rachmaninoff', 'James Levine', 'Berliner Philharmoniker']",1921,1,1.0
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",2,"Polonaise-Fantaisie in A-Flat, Op.61","['Frédéric Chopin', 'William Kapell']",1945,0,0.9973
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",3,"Polonaise-Fantaisie in A-Flat, Op.61","['Frédéric Chopin', 'William Kapell']",1945,0,0.9973
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",4,Concert for piano and orchestra: III. Phantaisie Pathetique,"['Howard Shelly', 'Kurt Graunke']",1936,0,0.9973
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",5,"Ballade No. 1 in G Minor, Op. 23","['Frédéric Chopin', 'Vladimir Horowitz']",1928,11,0.9971
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",6,Stravinsky: Le sacre du printemps (The Rite of Spring): Le sacre du printemps: The Sacrifice: Mystic Circles of the Young Girls,"['Igor Stravinsky', 'Eugene Ormandy']",1948,0,0.9949
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",7,"Années de pèlerinage, Première année (Suisse), S. 160: No. 6, Vallée d'Obermann","['Franz Liszt', 'Vladimir Horowitz']",1930,14,0.9948
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",8,"Nocturne in E Minor, Op. 72, No. 1","['Frédéric Chopin', 'Vladimir Horowitz']",1928,2,0.9931
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",9,"Ballade No. 1 in G Minor, Op. 23","['Frédéric Chopin', 'Vladimir Horowitz']",1965,25,0.9902
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",10,"Années de pèlerinage II (Italie), S. 161: No. 5, Sonetto del Petrarca No. 104 - Live","['Franz Liszt', 'Vladimir Horowitz']",1930,10,0.9892
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",1,strangers,"['biosphere', 'CIKI', 'Chris Wright', 'love-sadKID']",2017,60,0.9773
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",2,The Snake,"['Oscar Brown, Jr.']",1963,18,0.9734
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",3,Slogan Song,"['Phil Silvers', 'Rosemarie', 'Jack Albertson']",1952,0,0.9709
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",4,Mark On The Bus - Remastered 2009,['Beastie Boys'],1992,32,0.9653
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",5,Yeh Kab Tak Chalegi Chori,['Indrabadan Bhatt'],1947,0,0.9607
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",6,La Bonne Cuisine (Four Recipes): I. Plum Pudding,['Leonard Bernstein'],1950,0,0.9606
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",7,"Civilization (Bongo, Bongo, Bongo) - Single Version","['Danny Kaye', 'The Andrews Sisters', 'Vic Schoen & His Orchestra']",1987,46,0.9549
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",8,Qu'est Ce Qu'il Faut Faire Pour Gagner Son Beefsteak,['Georgius'],1927,0,0.9476
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",9,Dhaan Ke Khet Mein Na Jaiyo,['Zeenat Begum'],1944,0,0.9455
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",10,Iravile Vandhaan Inba Sugam Thandhu,['M. S. Rajeswari'],1948,0,0.9447
-Dynamite,['BTS'],1,Moghaddameye Segah,['Mohammadreza Shajarian'],1988,25,0.9967
-Dynamite,['BTS'],2,Blue Satin,['Henry Mancini'],1960,14,0.9957
-Dynamite,['BTS'],3,Gati Kumencar,['KHP Kridhamardawa Karaton Ngayogyakarta Hadiningrat'],1921,1,0.9955
-Dynamite,['BTS'],4,"Concerto No. 2 in B-Flat Major, Op. 83: I. Allegro non troppo","['Johannes Brahms', 'Arthur Rubinstein', 'Charles Münch']",1951,0,0.9952
-Dynamite,['BTS'],5,"Piano Concerto, Op. 16 (Remastered): I. Allegro molto moderato","['Edvard Grieg', 'Oscar Levant', 'Efrem Kurtz', 'New York Philharmonic']",1942,0,0.9944
-Dynamite,['BTS'],6,"Piano Concerto No. 2 in B-Flat Major, Op. 83: I. Allegro non troppo","['Johannes Brahms', 'Eugene Ormandy', 'Philadelphia Orchestra']",1951,0,0.9944
-Dynamite,['BTS'],7,Overture,"['Ambroise Thomas', 'Arturo Toscanini']",1952,0,0.9939
-Dynamite,['BTS'],8,"Symphony No. 9 in C Major, D. 944 - ""The Great"": 1. Andante - Allegro ma non troppo","['Franz Schubert', 'Berliner Philharmoniker', 'Wilhelm Furtwängler']",1952,2,0.9937
-Dynamite,['BTS'],9,"Symphony No. 4 in E Minor, Op. 98: IV. Allegro energico e passionata","['Johannes Brahms', 'Arturo Toscanini']",1951,0,0.9937
-Dynamite,['BTS'],10,"Symphony No. 4 in C Minor, D. 417, ""Tragic"": I. Adagio molto - Allegro vivace","['Franz Schubert', 'Sir John Barbirolli', 'New York Philharmonic']",1939,0,0.9935
-Blinding Lights,['The Weeknd'],1,What Kind of Fool Am I,['Sammy Davis Jr.'],1962,43,0.996
-Blinding Lights,['The Weeknd'],2,Vehu Rachum (Evening Prayer) - Voice,"['ZAVEL ZILBERTS', 'Richard Tucker', 'Sholom Secunda']",1953,0,0.9937
-Blinding Lights,['The Weeknd'],3,"Der fliegende Holländer, WWV 63 / Act 1: 1. Introduktion. ""Hojoje! Hojoje! Hallojo! Ho!""","['Richard Wagner', 'RIAS-Symphonie-Orchester', 'Ferenc Fricsay', 'RIAS Kammerchor']",1953,0,0.9883
-Blinding Lights,['The Weeknd'],4,Mil Violines,['Chucho Avellanet'],1965,27,0.9879
-Blinding Lights,['The Weeknd'],5,Yehi Rotzon (Blessing of the Month),"['Sholom Secunda', 'Richard Tucker']",1950,0,0.9875
-Blinding Lights,['The Weeknd'],6,Someone to Watch over Me - Remastered,"['Frank Sinatra', 'Axel Stordahl Orchestra']",1946,24,0.9843
-Blinding Lights,['The Weeknd'],7,Mori koumpara Giorgaina,['Filio Pirgaki'],1950,0,0.9843
-Blinding Lights,['The Weeknd'],8,Autumn Leaves - Remastered,['Nat King Cole'],1987,53,0.9839
-Blinding Lights,['The Weeknd'],9,Act I: Che gelida manina,"['Giacomo Puccini', 'Mario Lanza', 'Constantine Callinicos']",1949,1,0.9837
-Blinding Lights,['The Weeknd'],10,I Need,['Ella Fitzgerald'],1955,9,0.9827
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",1,Ne me quitte pas,['Jacques Brel'],2004,58,0.9832
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",2,月夜愁,['紫薇'],1963,25,0.9832
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",3,Tudo isto é fado,['Amália Rodrigues'],1952,10,0.9824
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",4,God Bless The Child,['Billie Holiday'],1956,47,0.9804
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",5,"Don't Say Goodnight (It's Time for Love), Pts. 1 & 2",['The Isley Brothers'],1980,41,0.9795
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",6,Have Mercy,['The Platters'],1956,14,0.9793
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",7,Dimmi Un Po’ Si Sinatra,"['Armando Trovajoli', 'T.Giacobetti']",1945,4,0.9767
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",8,Sealed with a Kiss,['The Happenings'],1966,16,0.9746
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",9,Un baiser qui n'en finit plus,['Suzy Delair'],1954,0,0.9733
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",10,A Stranger Called The Blues - Mono,['June Christy'],1955,9,0.9731
+﻿input_song,input_artists,input_model_index,rank,recommended_song,recommended_artists,recommended_model_index,year,popularity,cosine_distance,similarity
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,1,C'est écrit - Remastered,['Francis Cabrel'],134754,1989,52,0.0284,0.9716
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,2,Flow,['Cage The Elephant'],73274,2011,51,0.0305,0.9695
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,3,Let Go,['Beau Young Prince'],124411,2018,64,0.0332,0.9668
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,4,Eclipse,['$uicideBoy$'],123948,2016,57,0.035,0.965
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,5,Like Me,"['Lil Durk', 'Jeremih']",154516,2015,52,0.0355,0.9645
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,6,The Calling,"['TheFatRat', 'Laura Brehm']",169831,2016,60,0.0374,0.9626
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,7,Catch & Release - Deepend Remix,"['Matt Simons', 'Falco van den Acker', 'Bob Van Ratingen']",91364,2015,69,0.0388,0.9612
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,8,祇願一生愛一人,['Jacky Cheung'],164315,1989,28,0.0441,0.9559
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,9,Nobody Does It Better,"['Warren G', 'Nate Dogg']",52836,1998,48,0.0445,0.9555
+Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,10,Menswear,['The 1975'],90794,2013,51,0.0459,0.9541
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,1,La Zona,['Bad Bunny'],140687,2020,72,0.0135,0.9865
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,2,Busca Por Dentro,['Grupo Niche'],51308,1990,55,0.0154,0.9846
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,3,U Remind Me,['Usher'],15835,2001,73,0.0158,0.9842
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,4,La Boca - Remix,"['Mau y Ricky', 'Camilo', 'Lunay']",155290,2019,72,0.0176,0.9824
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,5,I Wanna Know You,['Hannah Montana'],55148,2009,55,0.0198,0.9802
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,6,Bonita,"['J Balvin', 'Jowell & Randy']",19767,2020,0,0.0202,0.9798
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,7,Criminal,"['Natti Natasha', 'Ozuna']",56602,2017,75,0.0213,0.9787
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,8,Lush Life,['Zara Larsson'],37938,2017,77,0.0217,0.9783
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,9,Hit 'Em up Style (Oops!),['Blu Cantrell'],53859,2003,47,0.0224,0.9776
+Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,10,Rumbera,['Willy Chirino'],164140,1988,24,0.0232,0.9768
+Dynamite,['BTS'],19618,1,Blue Hour,['TOMORROW X TOGETHER'],75084,2020,79,0.0069,0.9931
+Dynamite,['BTS'],19618,2,Million Dollar Bill,['Whitney Houston'],106658,2009,57,0.0074,0.9926
+Dynamite,['BTS'],19618,3,Stacy's Mom,['Bowling For Soup'],36728,2011,62,0.0101,0.9899
+Dynamite,['BTS'],19618,4,Dynamite,['Taio Cruz'],17619,2010,72,0.0109,0.9891
+Dynamite,['BTS'],19618,5,A Letter To My Younger Self (feat. Logic),"['Quinn XCII', 'Logic']",170625,2020,65,0.011,0.989
+Dynamite,['BTS'],19618,6,I Don't Want It At All,['Kim Petras'],124178,2017,61,0.0119,0.9881
+Dynamite,['BTS'],19618,7,Me & The Rhythm,['Selena Gomez'],169536,2015,53,0.0133,0.9867
+Dynamite,['BTS'],19618,8,I Know What You Did Last Summer,"['Shawn Mendes', 'Camila Cabello']",37633,2015,71,0.0133,0.9867
+Dynamite,['BTS'],19618,9,Holler,['Spice Girls'],104842,2000,52,0.0136,0.9864
+Dynamite,['BTS'],19618,10,That’s Damn Rock & Roll,['Eric Church'],123619,2014,49,0.0141,0.9859
+Blinding Lights,['The Weeknd'],19616,1,You Are Loved,['Stars Go Dim'],154586,2015,50,0.0052,0.9948
+Blinding Lights,['The Weeknd'],19616,2,Made in America,['Toby Keith'],17964,2011,62,0.006,0.994
+Blinding Lights,['The Weeknd'],19616,3,Latin Simone (Que Pasa Contigo),['Gorillaz'],71268,2001,45,0.0064,0.9936
+Blinding Lights,['The Weeknd'],19616,4,Sirens,['The String Cheese Incident'],35120,2003,54,0.0082,0.9918
+Blinding Lights,['The Weeknd'],19616,5,Danger Line,['Avenged Sevenfold'],55337,2010,57,0.0101,0.9899
+Blinding Lights,['The Weeknd'],19616,6,Dead Man Walking,['Jeremy Camp'],170365,2019,59,0.0101,0.9899
+Blinding Lights,['The Weeknd'],19616,7,Adolescents,['Incubus'],168688,2011,48,0.0102,0.9898
+Blinding Lights,['The Weeknd'],19616,8,I Will Remember You,['Amy Grant'],69411,1991,39,0.0107,0.9893
+Blinding Lights,['The Weeknd'],19616,9,Maldito Amor,['Los Inquietos Del Norte'],123343,2013,51,0.0115,0.9885
+Blinding Lights,['The Weeknd'],19616,10,Money and the Power,['Kid Ink'],90891,2013,55,0.0116,0.9884
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,1,Start Wit Me (feat. Gunna),"['Roddy Ricch', 'Gunna']",38342,2019,72,0.0039,0.9961
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,2,Legacy (feat. Travis Scott & 21 Savage),"['Offset', 'Travis Scott', '21 Savage']",92136,2019,66,0.01,0.99
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,3,Semi On Em,"['Gucci Mane', 'Chief Keef']",73849,2014,56,0.0101,0.9899
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,4,Offended (feat. Young Thug & 21 Savage),"['Meek Mill', 'Young Thug', '21 Savage']",74337,2016,60,0.0145,0.9855
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,5,Eviction Notice,['Lil Boodang'],160522,1969,18,0.0151,0.9849
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,6,Wildfire,"['SBTRKT', 'Little Dragon']",55518,2011,60,0.0152,0.9848
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,7,Money Flow,['Do Or Die'],136056,1996,34,0.0152,0.9848
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,8,UP LIKE AN INSOMNIAC - Freestyle,['XXXTENTACION'],37924,2017,69,0.0153,0.9847
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,9,FEFE,"['6ix9ine', 'Nicki Minaj', 'Murda Beatz']",19382,2018,76,0.0165,0.9835
+WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,10,What's the Move (feat. Lil Uzi Vert),"['Young Thug', 'Lil Uzi Vert']",140592,2019,61,0.0173,0.9827

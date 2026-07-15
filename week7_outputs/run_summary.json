@@ -1,7 +1,7 @@
 {
-  "run_started_at": "2026-06-24T15:16:39+07:00",
-  "run_completed_at": "2026-06-24T15:16:51+07:00",
-  "run_duration_seconds": 12.16,
+  "run_started_at": "2026-07-14T08:31:58+07:00",
+  "run_completed_at": "2026-07-14T08:32:35+07:00",
+  "run_duration_seconds": 36.3,
   "input_files": {
     "tracks": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_clean.csv",
     "artist_features": "D:\\spotify-recommendation-analytics\\cleaned_data\\data_by_artist_clean.csv",
@@ -19,11 +19,13 @@
     "audio_feature_trends_by_year.csv",
     "correlation_matrix.csv",
     "dataset_overview.csv",
+    "decade_explicit_multiindex_summary.csv",
     "decade_feature_summary.csv",
     "descriptive_statistics.csv",
     "genre_decade_popularity_pivot.csv",
     "missing_values_after_cleaning.csv",
     "recommendation_demo_results.csv",
+    "recommendation_validation.csv",
     "regression_actual_vs_predicted.csv",
     "regression_coefficients.csv",
     "regression_metrics.csv",
@@ -33,6 +35,8 @@
   "figures_created": [
     "audio_feature_trends_by_year.png",
     "correlation_heatmap.png",
+    "interactive_energy_loudness.html",
+    "interactive_energy_loudness_preview.png",
     "popularity_by_decade_boxplot.png",
     "popularity_distribution.png",
     "regression_actual_vs_predicted.png",
@@ -52,9 +56,36 @@
     "R2": 0.7594
   },
   "regression_plot_model": {
-    "model": "Ridge Regression",
+    "model": "Linear Regression",
     "feature_set": "Extended"
   },
+  "recommendation_summary": {
+    "status": "created",
+    "features": [
+      "acousticness",
+      "danceability",
+      "energy",
+      "instrumentalness",
+      "liveness",
+      "loudness",
+      "speechiness",
+      "tempo",
+      "valence"
+    ],
+    "scaler": "StandardScaler",
+    "metric": "cosine",
+    "requested_unique_recommendations_per_input": 10,
+    "seed_index_preserved": true,
+    "validation_passed": true,
+    "validation_file": "D:\\spotify-recommendation-analytics\\week7_outputs\\tables\\recommendation_validation.csv"
+  },
+  "interactive_plot_note": "Interactive Plotly HTML and static PNG preview created successfully.",
+  "model_artifacts_created": [
+    "best_popularity_model.joblib",
+    "nearest_neighbors_recommender.joblib",
+    "recommender_features.json",
+    "recommender_scaler.joblib"
+  ],
   "sql_reference_executed": false,
   "notes": [
     "Genre pivot created for the 30 genres with the most track-artist matches.",
