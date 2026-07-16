@@ -57,6 +57,16 @@ from src.config import (
 )
 from src.data_loader import load_project_data, read_csv_if_exists
 from src.preprocessing import clean_tracks_for_analysis
+from src.validation import (
+    feature_order_matches,
+    is_exact_top_n,
+    require_columns,
+    require_contiguous_model_index,
+    require_finite_numeric,
+    require_non_missing,
+    require_row_count,
+    require_unique,
+)
 
 import joblib
 import matplotlib.pyplot as plt
@@ -424,14 +434,12 @@ def regression_analysis(
     fitted_results = []
 
     for feature_set_name, requested_features in feature_sets.items():
-        missing_features = [
-            feature for feature in requested_features if feature not in tracks.columns
-        ]
-        if missing_features:
-            raise ValueError(
-                f"Regression feature set '{feature_set_name}' is missing columns: "
-                + ", ".join(missing_features)
-            )
+        require_columns(
+            tracks,
+            requested_features,
+            context=f"Regression feature set '{feature_set_name}'",
+            missing_label="columns",
+        )
 
         model_df = tracks.dropna(subset=[TARGET] + requested_features).copy()
         X = model_df[requested_features]
@@ -608,45 +616,57 @@ def build_recommender_demo(
         TARGET,
         *RECOMMENDER_FEATURES,
     ]
-    missing_catalog_columns = [
-        column for column in catalog_columns if column not in model_df.columns
-    ]
-    if missing_catalog_columns:
-        raise ValueError(
-            "Recommender catalog is missing required columns: "
-            + ", ".join(missing_catalog_columns)
-        )
-    if features != RECOMMENDER_FEATURES:
+    require_columns(model_df, catalog_columns, context="Recommender catalog")
+    if not feature_order_matches(features, RECOMMENDER_FEATURES):
         raise ValueError("Recommender feature order does not match RECOMMENDER_FEATURES.")
 
     catalog = model_df[catalog_columns].copy()
-    expected_model_indexes = np.arange(len(model_df))
-    if not np.array_equal(catalog["_model_index"].to_numpy(), expected_model_indexes):
-        raise ValueError("Recommender catalog model indexes are not contiguous and row-aligned.")
-    if not catalog["_model_index"].is_unique:
-        raise ValueError("Recommender catalog model indexes are not unique.")
-    if not catalog["id"].is_unique:
-        raise ValueError("Recommender catalog track ids are not unique.")
+    require_contiguous_model_index(catalog)
+    require_unique(
+        catalog,
+        "id",
+        context="Recommender catalog",
+        value_label="track ids",
+    )
     required_non_null = ["id", "name", "artists", *RECOMMENDER_FEATURES]
-    if catalog[required_non_null].isna().any().any():
-        raise ValueError("Recommender catalog contains missing identity or feature values.")
-    if not np.isfinite(catalog[RECOMMENDER_FEATURES].to_numpy(dtype=float)).all():
-        raise ValueError("Recommender catalog contains non-finite feature values.")
-    if catalog.columns[-len(RECOMMENDER_FEATURES):].tolist() != RECOMMENDER_FEATURES:
+    require_non_missing(
+        catalog,
+        required_non_null,
+        context="Recommender catalog",
+        value_label="identity or feature values",
+    )
+    require_finite_numeric(
+        catalog,
+        RECOMMENDER_FEATURES,
+        context="Recommender catalog",
+        value_label="feature values",
+    )
+    if not feature_order_matches(
+        catalog.columns[-len(RECOMMENDER_FEATURES):],
+        RECOMMENDER_FEATURES,
+    ):
         raise ValueError("Recommender catalog feature columns are out of order.")
 
     scaler = StandardScaler()
     X = scaler.fit_transform(model_df[features])
 
-    if len(catalog) != len(X):
-        raise ValueError("Recommender catalog row count does not match the feature matrix.")
+    require_row_count(
+        len(catalog),
+        len(X),
+        context="Recommender catalog",
+        expected_context="the feature matrix",
+    )
 
     candidate_count = len(model_df)
     nn = NearestNeighbors(n_neighbors=candidate_count, metric="cosine")
     nn.fit(X)
 
-    if len(catalog) != nn.n_samples_fit_:
-        raise ValueError("Recommender catalog row count does not match the fitted model.")
+    require_row_count(
+        len(catalog),
+        nn.n_samples_fit_,
+        context="Recommender catalog",
+        expected_context="the fitted model",
+    )
 
     joblib.dump(scaler, paths.model_artifacts / RECOMMENDER_SCALER_FILENAME)
     joblib.dump(nn, paths.model_artifacts / RECOMMENDER_NEIGHBORS_FILENAME)
@@ -729,7 +749,7 @@ def build_recommender_demo(
             for row in input_rows
         ]
         expected_ranks = list(range(1, len(input_rows) + 1))
-        exact_top_n = len(input_rows) == n_neighbors
+        exact_top_n = is_exact_top_n(len(input_rows), n_neighbors)
         input_track_absent = input_key not in recommended_keys
         no_duplicate_recommendations = len(recommended_keys) == len(set(recommended_keys))
         rank_consecutive = ranks == expected_ranks
