@@ -6,6 +6,9 @@ import hashlib
 import importlib
 import json
 import os
+import struct
+import subprocess
+import sys
 from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,9 +18,11 @@ from typing import Any
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import joblib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+import src.regression as regression_module
 from pandas.api.types import is_numeric_dtype
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -57,6 +62,66 @@ CANONICAL_METRICS = {
     ("Extended", "Ridge Regression"): (7.9821, 10.7309, 0.7594),
 }
 ARTIFACT_NAME = "best_popularity_model.joblib"
+BASELINE_SUMMARY = {
+    "models_trained": [
+        "Audio Only - Linear Regression",
+        "Audio Only - Ridge Regression",
+        "Extended - Linear Regression",
+        "Extended - Ridge Regression",
+    ],
+    "best_model": {
+        "model": "Linear Regression",
+        "feature_set": "Extended",
+        "R2": 0.998,
+    },
+    "metrics": [
+        {
+            "model": "Linear Regression",
+            "feature_set": "Audio Only",
+            "MAE": 3.66,
+            "RMSE": 4.4679,
+            "R2": 0.6704,
+        },
+        {
+            "model": "Ridge Regression",
+            "feature_set": "Audio Only",
+            "MAE": 3.6698,
+            "RMSE": 4.4887,
+            "R2": 0.6673,
+        },
+        {
+            "model": "Linear Regression",
+            "feature_set": "Extended",
+            "MAE": 0.2839,
+            "RMSE": 0.352,
+            "R2": 0.998,
+        },
+        {
+            "model": "Ridge Regression",
+            "feature_set": "Extended",
+            "MAE": 0.3473,
+            "RMSE": 0.4336,
+            "R2": 0.9969,
+        },
+    ],
+    "plot_model": {
+        "model": "Linear Regression",
+        "feature_set": "Extended",
+    },
+}
+BASELINE_FRAME_FINGERPRINTS = {
+    "metrics": "b04528f1120d326178cc23dc5ae2f35c3a17aa1b8e0ac1bddd0bcbdde82c76d0",
+    "predictions": "b33bb6d3cf2c2e8386584e109ae6ab048b69d3b0a7042821d61834d069588e73",
+    "coefficients": "4479aef43c38cd04fa23c2f25bc90b5c048d54c348c63acc45a978abeafdad55",
+}
+BASELINE_ARTIFACT_PREDICTION_FINGERPRINT = (
+    "24f294a7d7b1c7834f6480099be3dee2401ef565f504fb0f66b405aa80dadb9c"
+)
+BASELINE_FIGURE_DIMENSIONS = {
+    "regression_actual_vs_predicted.png": (1080, 1080),
+    "regression_residuals.png": (1260, 900),
+    "regression_coefficients.png": (1440, 1080),
+}
 
 
 @dataclass(frozen=True)
@@ -69,6 +134,9 @@ class RegressionRun:
     artifact: Pipeline
     split_calls: tuple[dict[str, Any], ...]
     trained_pipelines: tuple[Pipeline, ...]
+    input_unchanged: bool
+    figure_dimensions: dict[str, tuple[int, int]]
+    open_figures: tuple[int, ...]
 
 
 @pytest.fixture(scope="session")
@@ -184,6 +252,21 @@ def _sha256_manifest(root: Path) -> dict[str, str]:
     return manifest
 
 
+def _frame_fingerprint(frame: pd.DataFrame) -> str:
+    hashed = pd.util.hash_pandas_object(frame, index=True).to_numpy(dtype=np.uint64)
+    return hashlib.sha256(hashed.tobytes()).hexdigest()
+
+
+def _array_fingerprint(values: Any) -> str:
+    return hashlib.sha256(np.asarray(values).tobytes()).hexdigest()
+
+
+def _png_dimensions(path: Path) -> tuple[int, int]:
+    with path.open("rb") as handle:
+        header = handle.read(24)
+    return struct.unpack(">II", header[16:24])
+
+
 @pytest.fixture(scope="session", autouse=True)
 def repository_preservation(project_root: Path) -> Generator[None, None, None]:
     """Prove regression tests do not alter canonical data or outputs."""
@@ -198,6 +281,10 @@ def repository_preservation(project_root: Path) -> Generator[None, None, None]:
 
 def _load_run(paths: Any, summary: dict[str, Any], **recording: Any) -> RegressionRun:
     artifact_path = paths.model_artifacts / ARTIFACT_NAME
+    figure_dimensions = {
+        path.name: _png_dimensions(path)
+        for path in sorted(paths.figures.glob("*.png"))
+    }
     return RegressionRun(
         summary=summary,
         paths=paths,
@@ -207,6 +294,9 @@ def _load_run(paths: Any, summary: dict[str, Any], **recording: Any) -> Regressi
         artifact=joblib.load(artifact_path),
         split_calls=tuple(recording.get("split_calls", ())),
         trained_pipelines=tuple(recording.get("trained_pipelines", ())),
+        input_unchanged=bool(recording.get("input_unchanged", True)),
+        figure_dimensions=figure_dimensions,
+        open_figures=tuple(plt.get_fignums()),
     )
 
 
@@ -240,10 +330,12 @@ def temporary_regression_run(
         return pipeline
 
     patch = pytest.MonkeyPatch()
-    patch.setattr(project_module, "train_test_split", recording_split)
-    patch.setattr(project_module, "Pipeline", recording_pipeline)
+    patch.setattr(regression_module, "train_test_split", recording_split)
+    patch.setattr(regression_module, "Pipeline", recording_pipeline)
+    run_tracks = synthetic_tracks.copy(deep=True)
+    before = run_tracks.copy(deep=True)
     try:
-        summary = project_module.regression_analysis(synthetic_tracks.copy(deep=True), paths)
+        summary = project_module.regression_analysis(run_tracks, paths)
     finally:
         patch.undo()
     return _load_run(
@@ -251,6 +343,7 @@ def temporary_regression_run(
         summary,
         split_calls=split_calls,
         trained_pipelines=trained_pipelines,
+        input_unchanged=run_tracks.equals(before),
     )
 
 
@@ -279,12 +372,112 @@ def _model_name(estimator: Any) -> str:
     raise AssertionError(f"Unexpected regression estimator: {type(estimator).__name__}")
 
 
+def test_public_regression_function_identity(project_module: ModuleType) -> None:
+    assert project_module.regression_analysis is regression_module.regression_analysis
+
+
+def test_regression_import_has_no_side_effects(
+    project_root: Path,
+    tmp_path: Path,
+) -> None:
+    working = tmp_path / "working"
+    mpl_config = tmp_path / "mpl-config"
+    working.mkdir()
+    mpl_config.mkdir()
+    script = """
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+from sklearn.pipeline import Pipeline
+
+fit_calls = []
+def forbidden_fit(self, *args, **kwargs):
+    fit_calls.append(type(self).__name__)
+    raise AssertionError("Pipeline.fit called during import")
+Pipeline.fit = forbidden_fit
+before_files = sorted(str(path.relative_to(Path.cwd())) for path in Path.cwd().rglob("*") if path.is_file())
+before_figures = plt.get_fignums()
+import src.regression
+after_files = sorted(str(path.relative_to(Path.cwd())) for path in Path.cwd().rglob("*") if path.is_file())
+print(json.dumps({
+    "before_files": before_files,
+    "after_files": after_files,
+    "fit_calls": fit_calls,
+    "before_figures": before_figures,
+    "after_figures": plt.get_fignums(),
+}))
+"""
+    env = os.environ.copy()
+    env["MPLBACKEND"] = "Agg"
+    env["MPLCONFIGDIR"] = str(mpl_config)
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(project_root), env.get("PYTHONPATH")) if value
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=working,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+    assert result["after_files"] == result["before_files"] == []
+    assert result["fit_calls"] == []
+    assert result["after_figures"] == result["before_figures"] == []
+
+
+def test_regression_dependency_boundary(
+    project_root: Path,
+    tmp_path: Path,
+) -> None:
+    mpl_config = tmp_path / "mpl-config"
+    mpl_config.mkdir()
+    script = """
+import importlib
+import json
+import sys
+
+before = set(sys.modules)
+importlib.import_module("src.regression")
+introduced = set(sys.modules) - before
+forbidden = ["seaborn", "plotly", "sqlite3", "src.eda", "src.visualization", "spotify_week7_analysis"]
+loaded = sorted(
+    module
+    for module in introduced
+    if any(module == name or module.startswith(name + ".") for name in forbidden)
+)
+print(json.dumps(loaded))
+"""
+    env = os.environ.copy()
+    env["MPLBACKEND"] = "Agg"
+    env["MPLCONFIGDIR"] = str(mpl_config)
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(project_root), env.get("PYTHONPATH")) if value
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(completed.stdout) == []
+
+
 def test_regression_constants(project_module: ModuleType) -> None:
     assert project_module.TARGET == "popularity"
     assert project_module.RANDOM_STATE == 42
     assert project_module.REGRESSION_AUDIO_FEATURES == AUDIO_FEATURES
     assert project_module.REGRESSION_EXTENDED_FEATURES == EXTENDED_FEATURES
     assert project_module.REGRESSION_FEATURES == EXTENDED_FEATURES
+    assert regression_module.TARGET == project_module.TARGET
+    assert regression_module.RANDOM_STATE == project_module.RANDOM_STATE
+    assert regression_module.REGRESSION_AUDIO_FEATURES == AUDIO_FEATURES
+    assert regression_module.REGRESSION_EXTENDED_FEATURES == EXTENDED_FEATURES
+    assert regression_module.REGRESSION_FEATURES == EXTENDED_FEATURES
 
 
 def test_canonical_metrics_experiment_manifest(
@@ -375,6 +568,46 @@ def test_four_models_are_trained(temporary_regression_run: RegressionRun) -> Non
     assert _experiment_pairs(metrics) == EXPECTED_EXPERIMENTS
     assert not metrics.duplicated(subset=["feature_set", "model"]).any()
     assert np.isfinite(metrics[["MAE", "RMSE", "R2"]].to_numpy()).all()
+
+
+def test_regression_input_is_immutable(
+    temporary_regression_run: RegressionRun,
+) -> None:
+    assert temporary_regression_run.input_unchanged
+
+
+def test_pre_post_extraction_equivalence(
+    temporary_regression_run: RegressionRun,
+    synthetic_tracks: pd.DataFrame,
+) -> None:
+    run = temporary_regression_run
+    assert run.summary == BASELINE_SUMMARY
+    assert _frame_fingerprint(run.metrics) == BASELINE_FRAME_FINGERPRINTS["metrics"]
+    assert (
+        _frame_fingerprint(run.predictions)
+        == BASELINE_FRAME_FINGERPRINTS["predictions"]
+    )
+    assert (
+        _frame_fingerprint(run.coefficients)
+        == BASELINE_FRAME_FINGERPRINTS["coefficients"]
+    )
+    assert isinstance(run.artifact, Pipeline)
+    assert list(run.artifact.named_steps) == ["scaler", "model"]
+    assert isinstance(run.artifact.named_steps["scaler"], StandardScaler)
+    assert isinstance(run.artifact.named_steps["model"], LinearRegression)
+    assert run.artifact.feature_names_in_.tolist() == EXTENDED_FEATURES
+    _, x_test, _, _ = train_test_split(
+        synthetic_tracks[EXTENDED_FEATURES],
+        synthetic_tracks["popularity"],
+        test_size=0.2,
+        random_state=42,
+    )
+    assert (
+        _array_fingerprint(run.artifact.predict(x_test))
+        == BASELINE_ARTIFACT_PREDICTION_FINGERPRINT
+    )
+    assert run.figure_dimensions == BASELINE_FIGURE_DIMENSIONS
+    assert run.open_figures == ()
 
 
 def test_standard_scaler_in_every_pipeline(
@@ -493,21 +726,31 @@ def test_selected_coefficient_manifest(
     assert np.isfinite(selected_coefficients["coefficient"].to_numpy()).all()
 
 
-def test_temporary_output_manifest(temporary_regression_run: RegressionRun) -> None:
-    required = [
-        temporary_regression_run.paths.tables / "regression_metrics.csv",
-        temporary_regression_run.paths.tables / "regression_actual_vs_predicted.csv",
-        temporary_regression_run.paths.tables / "regression_coefficients.csv",
-        temporary_regression_run.paths.figures / "regression_actual_vs_predicted.png",
-        temporary_regression_run.paths.figures / "regression_residuals.png",
-        temporary_regression_run.paths.figures / "regression_coefficients.png",
-        temporary_regression_run.paths.model_artifacts / ARTIFACT_NAME,
-    ]
-    for path in required:
+def test_exact_temporary_output_filename_manifest(
+    temporary_regression_run: RegressionRun,
+) -> None:
+    expected = {
+        "tables/regression_metrics.csv",
+        "tables/regression_actual_vs_predicted.csv",
+        "tables/regression_coefficients.csv",
+        "figures/regression_actual_vs_predicted.png",
+        "figures/regression_residuals.png",
+        "figures/regression_coefficients.png",
+        f"model_artifacts/{ARTIFACT_NAME}",
+    }
+    actual = {
+        path.relative_to(temporary_regression_run.paths.output).as_posix()
+        for path in temporary_regression_run.paths.output.rglob("*")
+        if path.is_file()
+    }
+    assert actual == expected
+    for relative in sorted(expected):
+        path = temporary_regression_run.paths.output / relative
         assert path.is_file(), f"Temporary regression output missing: {path.name}"
         assert path.stat().st_size > 0, f"Temporary regression output is empty: {path.name}"
     png_signature = b"\x89PNG\r\n\x1a\n"
-    for path in required:
+    for relative in sorted(expected):
+        path = temporary_regression_run.paths.output / relative
         if path.suffix == ".png":
             with path.open("rb") as handle:
                 assert handle.read(8) == png_signature, f"Invalid PNG signature: {path.name}"
