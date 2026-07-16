@@ -29,7 +29,9 @@ test.py
 
 # Generated model artifacts
 *.joblib
-week7_outputs/model_artifacts/
+!week7_outputs/model_artifacts/
+week7_outputs/model_artifacts/*
+!week7_outputs/model_artifacts/recommender_catalog.csv
 
 # Preserved local report deliverables and source backups
 report_package/
