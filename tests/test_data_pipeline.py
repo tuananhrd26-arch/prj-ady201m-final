@@ -14,7 +14,15 @@ import pandas as pd
 import pytest
 from pandas.api.types import is_numeric_dtype
 
+from src.config import (
+    RECOMMENDER_FEATURES,
+    REGRESSION_AUDIO_FEATURES,
+    REGRESSION_EXTENDED_FEATURES,
+    REGRESSION_FEATURES,
+    TARGET,
+)
 from src.data_loader import load_project_data, read_csv_if_exists
+from src.preprocessing import clean_tracks_for_analysis
 
 
 REQUIRED_CLEANED_FILES = {
@@ -154,6 +162,52 @@ LOADER_PATHS = {
     "artist_genres": Path("cleaned_data") / "data_w_genres_clean.csv",
 }
 
+NUMERIC_CONVERSION_COLUMNS = [
+    "acousticness",
+    "danceability",
+    "duration_ms",
+    "energy",
+    "explicit",
+    "instrumentalness",
+    "key",
+    "liveness",
+    "loudness",
+    "mode",
+    "popularity",
+    "speechiness",
+    "tempo",
+    "valence",
+    "year",
+]
+
+CANONICAL_PROCESSED_COLUMNS = EXPECTED_COLUMNS["data_clean.csv"] + ["decade"]
+CANONICAL_PROCESSED_DTYPES = {
+    "valence": "float64",
+    "year": "int64",
+    "acousticness": "float64",
+    "artists": "str",
+    "danceability": "float64",
+    "duration_ms": "int64",
+    "energy": "float64",
+    "explicit": "int64",
+    "id": "str",
+    "instrumentalness": "float64",
+    "key": "float64",
+    "liveness": "float64",
+    "loudness": "float64",
+    "mode": "float64",
+    "name": "str",
+    "popularity": "int64",
+    "release_date": "str",
+    "speechiness": "float64",
+    "tempo": "float64",
+    "release_date_parsed": "str",
+    "decade": "int64",
+}
+CANONICAL_PROCESSED_FINGERPRINT = (
+    "3ccbd1356da53ff61ea16bacebd9058b98fc8c19712d30c27218932ab7e1e52f"
+)
+
 
 @pytest.fixture(scope="session")
 def project_root() -> Path:
@@ -183,6 +237,15 @@ def project_loader_result(
     return load_project_data(project_root)
 
 
+@pytest.fixture(scope="session")
+def canonical_processed_tracks(
+    project_loader_result: tuple[dict[str, pd.DataFrame], dict[str, Path]],
+) -> pd.DataFrame:
+    """Prepare the canonical tracks once for preprocessing characterization."""
+    tracks = project_loader_result[0]["tracks"]
+    return clean_tracks_for_analysis(tracks.copy(deep=True))
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -197,6 +260,11 @@ def _tree_manifest(root: Path) -> dict[str, str]:
         for path in sorted(root.rglob("*"))
         if path.is_file()
     }
+
+
+def _dataframe_fingerprint(frame: pd.DataFrame) -> str:
+    values = pd.util.hash_pandas_object(frame, index=True).values
+    return hashlib.sha256(values.tobytes()).hexdigest()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -359,6 +427,237 @@ def test_loader_functions_remain_public_through_monolith(
 
     assert public.load_project_data is load_project_data
     assert public.read_csv_if_exists is read_csv_if_exists
+
+
+def test_preprocessing_function_remains_public_through_monolith() -> None:
+    public = importlib.import_module("spotify_week7_analysis")
+
+    assert public.clean_tracks_for_analysis is clean_tracks_for_analysis
+
+
+def test_preprocessing_does_not_mutate_input_dataframe() -> None:
+    source = pd.DataFrame(
+        {
+            "id": ["a", "b", None, "d"],
+            "name": ["Alpha", "Beta", "Removed", "Delta"],
+            "artists": ["Artist A", "Artist B", "Artist C", None],
+            "year": ["1921", "1930", "1940", "2000"],
+            "energy": ["0.1", None, "bad", "0.8"],
+            "popularity": [10, 20, 30, None],
+        },
+        index=[10, 30, 50, 90],
+    )
+    before = source.copy(deep=True)
+
+    result = clean_tracks_for_analysis(source)
+
+    pd.testing.assert_frame_equal(source, before)
+    assert result is not source
+
+
+def test_preprocessing_numeric_conversion_contract() -> None:
+    values: dict[str, list[object]] = {
+        column: ["1", "bad", "3"] for column in NUMERIC_CONVERSION_COLUMNS
+    }
+    values["year"] = ["1921", "bad", "2020"]
+    source = pd.DataFrame(
+        {
+            "id": ["a", "b", "c"],
+            "name": ["Alpha", "Beta", "Gamma"],
+            **values,
+            "unprocessed_text": ["1", "bad", "3"],
+        }
+    )
+    expected_candidates = sorted(
+        set(REGRESSION_FEATURES + RECOMMENDER_FEATURES + [TARGET])
+    )
+
+    result = clean_tracks_for_analysis(source)
+
+    assert expected_candidates == NUMERIC_CONVERSION_COLUMNS
+    for column in NUMERIC_CONVERSION_COLUMNS:
+        assert is_numeric_dtype(result[column]), column
+    for column in set(NUMERIC_CONVERSION_COLUMNS) - {"year"}:
+        assert result.loc[1, column] == pytest.approx(2.0)
+    assert result["year"].tolist() == [1921.0, 1970.5, 2020.0]
+    assert result["decade"].tolist() == [1920, 1970, 2020]
+    assert result["unprocessed_text"].tolist() == ["1", "bad", "3"]
+
+
+def test_preprocessing_identity_filtering_contract() -> None:
+    source = pd.DataFrame(
+        {
+            "id": ["valid", None, "missing-name", "no-artists", "", "blank-name"],
+            "name": ["Valid", "Missing ID", None, "No Artists", "Blank ID", ""],
+            "artists": ["Artist", "Artist", "Artist", None, "Artist", "Artist"],
+            "year": [2000, 2001, 2002, 2003, 2004, 2005],
+        }
+    )
+
+    result = clean_tracks_for_analysis(source)
+
+    assert result["id"].tolist() == ["valid", "no-artists", "", "blank-name"]
+    assert result["name"].tolist() == ["Valid", "No Artists", "Blank ID", ""]
+    assert result["artists"].isna().sum() == 1
+
+
+def test_preprocessing_median_fill_occurs_after_identity_filtering() -> None:
+    source = pd.DataFrame(
+        {
+            "id": ["a", "b", "c", "d", None],
+            "name": ["A", "B", "C", "D", "Removed"],
+            "year": [2000, 2001, 2002, 2003, 2004],
+            "energy": [1.0, 3.0, np.nan, np.nan, 100.0],
+            "popularity": [10.0, 30.0, np.nan, np.nan, 100.0],
+            "custom_numeric": [1.0, 3.0, np.nan, np.nan, 100.0],
+            "odd_numeric": [1.0, 5.0, 9.0, np.nan, 100.0],
+            "all_missing_numeric": [np.nan, np.nan, np.nan, np.nan, 100.0],
+            "note": ["one", "two", None, "four", "removed"],
+        }
+    )
+
+    result = clean_tracks_for_analysis(source)
+
+    assert result["energy"].tolist() == [1.0, 3.0, 2.0, 2.0]
+    assert result["popularity"].tolist() == [10.0, 30.0, 20.0, 20.0]
+    assert result["custom_numeric"].tolist() == [1.0, 3.0, 2.0, 2.0]
+    assert result["odd_numeric"].tolist() == [1.0, 5.0, 9.0, 5.0]
+    assert result["all_missing_numeric"].isna().all()
+    assert result["note"].isna().sum() == 1
+
+
+def test_preprocessing_decade_construction_contract() -> None:
+    years: list[object] = [1921, 1929, 1930, 1999, 2000, 2020, "bad", None]
+    source = pd.DataFrame(
+        {
+            "id": [f"track-{index}" for index in range(len(years))],
+            "name": [f"Track {index}" for index in range(len(years))],
+            "year": years,
+        }
+    )
+
+    result = clean_tracks_for_analysis(source)
+
+    assert result["decade"].tolist() == [
+        1920,
+        1920,
+        1930,
+        1990,
+        2000,
+        2020,
+        1960,
+        1960,
+    ]
+    assert str(result["decade"].dtype) == "int64"
+    assert not result["decade"].isna().any()
+    with pytest.raises(pd.errors.IntCastingNaNError):
+        clean_tracks_for_analysis(
+            pd.DataFrame(
+                {"id": ["a", "b"], "name": ["A", "B"], "year": [None, "bad"]}
+            )
+        )
+
+
+def test_preprocessing_preserves_row_order_and_resets_index() -> None:
+    source = pd.DataFrame(
+        {
+            "id": ["first", None, "third", "fourth"],
+            "name": ["First", "Removed", "Third", "Fourth"],
+            "year": [2003, 1990, 1921, 2020],
+        },
+        index=[50, 10, 90, 20],
+    )
+
+    result = clean_tracks_for_analysis(source)
+
+    assert result["id"].tolist() == ["first", "third", "fourth"]
+    assert isinstance(result.index, pd.RangeIndex)
+    assert result.index.equals(pd.RangeIndex(3))
+    assert "index" not in result.columns
+
+
+def test_preprocessing_is_deterministic() -> None:
+    source = pd.DataFrame(
+        {
+            "id": ["a", "b", "c"],
+            "name": ["A", "B", "C"],
+            "year": [1921, 1955, 2020],
+            "energy": [0.1, np.nan, 0.9],
+        }
+    )
+
+    first = clean_tracks_for_analysis(source.copy(deep=True))
+    second = clean_tracks_for_analysis(source.copy(deep=True))
+
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_preprocessing_matches_canonical_baseline(
+    project_loader_result: tuple[dict[str, pd.DataFrame], dict[str, Path]],
+    canonical_processed_tracks: pd.DataFrame,
+) -> None:
+    source = project_loader_result[0]["tracks"]
+    processed = canonical_processed_tracks
+    expected_missing = {column: 0 for column in CANONICAL_PROCESSED_COLUMNS}
+    expected_missing["release_date_parsed"] = 119798
+
+    assert source.shape == (170653, 20)
+    assert processed.shape == (170653, 21)
+    assert len(source) - len(processed) == 0
+    assert processed.columns.tolist() == CANONICAL_PROCESSED_COLUMNS
+    assert processed.index.equals(pd.RangeIndex(170653))
+    assert {column: str(dtype) for column, dtype in processed.dtypes.items()} == (
+        CANONICAL_PROCESSED_DTYPES
+    )
+    assert processed.isna().sum().to_dict() == expected_missing
+    assert int(processed["decade"].min()) == 1920
+    assert int(processed["decade"].max()) == 2020
+    assert not processed["decade"].isna().any()
+    assert int(processed["id"].duplicated().sum()) == 0
+    assert processed["id"].head(5).tolist() == source["id"].head(5).tolist()
+    assert _dataframe_fingerprint(processed) == CANONICAL_PROCESSED_FINGERPRINT
+
+
+def test_preprocessing_preserves_regression_feature_compatibility(
+    canonical_processed_tracks: pd.DataFrame,
+) -> None:
+    required = [TARGET, *REGRESSION_AUDIO_FEATURES, *REGRESSION_EXTENDED_FEATURES]
+
+    assert set(required).issubset(canonical_processed_tracks.columns)
+    for column in set(required):
+        values = canonical_processed_tracks[column]
+        assert is_numeric_dtype(values), column
+        assert np.isfinite(values.to_numpy()).all(), column
+
+
+def test_preprocessing_preserves_recommender_catalog_compatibility(
+    canonical_processed_tracks: pd.DataFrame,
+) -> None:
+    required = ["id", "name", "artists", *RECOMMENDER_FEATURES]
+
+    assert set(required).issubset(canonical_processed_tracks.columns)
+    catalog = canonical_processed_tracks.dropna(
+        subset=["name", "artists", *RECOMMENDER_FEATURES]
+    ).reset_index(drop=True)
+    assert len(catalog) == 170653
+    assert catalog["id"].is_unique
+    assert np.isfinite(catalog[RECOMMENDER_FEATURES].to_numpy()).all()
+
+
+def test_preprocessing_has_no_file_system_side_effects(
+    project_root: Path,
+    cleaned_data_dir: Path,
+    project_loader_result: tuple[dict[str, pd.DataFrame], dict[str, Path]],
+) -> None:
+    before_files = _tree_manifest(cleaned_data_dir)
+    before_root_dirs = {
+        path.name for path in project_root.iterdir() if path.is_dir()
+    }
+
+    clean_tracks_for_analysis(project_loader_result[0]["tracks"].copy(deep=True))
+
+    assert _tree_manifest(cleaned_data_dir) == before_files
+    assert {path.name for path in project_root.iterdir() if path.is_dir()} == before_root_dirs
 
 
 def test_required_cleaned_files_exist(cleaned_data_dir: Path) -> None:
