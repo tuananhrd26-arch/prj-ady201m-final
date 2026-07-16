@@ -6,6 +6,8 @@ import hashlib
 import importlib
 import json
 import os
+import subprocess
+import sys
 from collections.abc import Generator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+import src.recommender as recommender_module
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
@@ -85,6 +88,58 @@ CATALOG_COLUMNS = [
     "popularity",
     *FEATURES,
 ]
+BASELINE_SUMMARY_SEMANTICS = {
+    "status": "created",
+    "features": FEATURES,
+    "scaler": "StandardScaler",
+    "metric": "cosine",
+    "requested_unique_recommendations_per_input": 10,
+    "seed_index_preserved": True,
+    "validation_passed": True,
+    "catalog_rows": 160,
+}
+BASELINE_FRAME_FINGERPRINTS = {
+    "results": "05bc04653d9eef8d3aeb10ab2149967986fd1f5b4c817633b5cca07bccc0a7ac",
+    "validation": "2646fdde422141d56232ae7c33aa343de18f5430317cb6da62d17b8c57d1eb29",
+    "catalog": "f471e471c9d04f53e95a132dcfc6477a44735196698498d2a2c6f111e59f85ef",
+}
+BASELINE_SCALER_MEAN = [
+    0.5208880664926068,
+    0.4937729429654187,
+    0.5463941771284937,
+    0.4671051585220338,
+    0.4641647238475504,
+    -18.616494394763986,
+    0.3994049085023897,
+    129.41382483749766,
+    0.474244889979947,
+]
+BASELINE_SCALER_SCALE = [
+    0.276352821026385,
+    0.2672147302414972,
+    0.29152719304720776,
+    0.28686270320274193,
+    0.30722068932330376,
+    9.840859139130481,
+    0.25053786179944787,
+    44.48705947902974,
+    0.2806516218088108,
+]
+BASELINE_SCALER_VAR = [
+    0.07637088168924117,
+    0.07140371205803614,
+    0.08498810428598394,
+    0.08229021048878442,
+    0.09438455194828593,
+    96.8425085962079,
+    0.06276922019503925,
+    1979.0984610907296,
+    0.07876533282391576,
+]
+BASELINE_FITTED_MATRIX_FINGERPRINT = (
+    "2325d961c8c4a805b470df900716548231c401f5a7177d9c262ae160f6308997"
+)
+BASELINE_FEATURE_JSON = json.dumps(FEATURES, indent=2)
 
 
 @dataclass(frozen=True)
@@ -96,7 +151,12 @@ class RecommenderRun:
     scaler: StandardScaler
     neighbors: NearestNeighbors
     features: list[str]
+    feature_text: str
     catalog: pd.DataFrame
+    input_unchanged: bool
+    scaler_constructions: tuple[dict[str, Any], ...]
+    neighbor_constructions: tuple[dict[str, Any], ...]
+    joblib_dump_order: tuple[str, ...]
 
 
 @pytest.fixture(scope="session")
@@ -214,6 +274,15 @@ def _sha256_manifest(root: Path) -> dict[str, str]:
     return manifest
 
 
+def _frame_fingerprint(frame: pd.DataFrame) -> str:
+    hashed = pd.util.hash_pandas_object(frame, index=True).to_numpy(dtype=np.uint64)
+    return hashlib.sha256(hashed.tobytes()).hexdigest()
+
+
+def _array_fingerprint(values: Any) -> str:
+    return hashlib.sha256(np.ascontiguousarray(values).tobytes()).hexdigest()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def repository_preservation(project_root: Path) -> Generator[None, None, None]:
     cleaned = project_root / "cleaned_data"
@@ -225,7 +294,13 @@ def repository_preservation(project_root: Path) -> Generator[None, None, None]:
     assert _sha256_manifest(outputs) == outputs_before, "week7_outputs changed"
 
 
-def _load_run(paths: Any, summary: dict[str, Any]) -> RecommenderRun:
+def _load_run(
+    paths: Any,
+    summary: dict[str, Any],
+    **recording: Any,
+) -> RecommenderRun:
+    feature_path = paths.model_artifacts / ARTIFACT_NAMES["features"]
+    feature_text = feature_path.read_text(encoding="utf-8")
     with (paths.model_artifacts / ARTIFACT_NAMES["features"]).open(
         encoding="utf-8"
     ) as handle:
@@ -238,7 +313,12 @@ def _load_run(paths: Any, summary: dict[str, Any]) -> RecommenderRun:
         scaler=joblib.load(paths.model_artifacts / ARTIFACT_NAMES["scaler"]),
         neighbors=joblib.load(paths.model_artifacts / ARTIFACT_NAMES["neighbors"]),
         features=features,
+        feature_text=feature_text,
         catalog=pd.read_csv(paths.model_artifacts / ARTIFACT_NAMES["catalog"]),
+        input_unchanged=bool(recording.get("input_unchanged", True)),
+        scaler_constructions=tuple(recording.get("scaler_constructions", ())),
+        neighbor_constructions=tuple(recording.get("neighbor_constructions", ())),
+        joblib_dump_order=tuple(recording.get("joblib_dump_order", ())),
     )
 
 
@@ -250,13 +330,46 @@ def temporary_recommender_run(
 ) -> RecommenderRun:
     run_root = tmp_path_factory.mktemp("recommender-run")
     paths = project_module.make_paths(run_root, "outputs")
-    summary = project_module.build_recommender_demo(
-        synthetic_tracks.copy(deep=True),
+    scaler_constructions: list[dict[str, Any]] = []
+    neighbor_constructions: list[dict[str, Any]] = []
+    joblib_dump_order: list[str] = []
+    original_dump = joblib.dump
+
+    def recording_scaler(*args: Any, **kwargs: Any) -> StandardScaler:
+        scaler_constructions.append({"args": args, "kwargs": kwargs})
+        return StandardScaler(*args, **kwargs)
+
+    def recording_neighbors(*args: Any, **kwargs: Any) -> NearestNeighbors:
+        neighbor_constructions.append({"args": args, "kwargs": kwargs})
+        return NearestNeighbors(*args, **kwargs)
+
+    def recording_dump(value: Any, filename: Any, *args: Any, **kwargs: Any) -> Any:
+        joblib_dump_order.append(Path(filename).name)
+        return original_dump(value, filename, *args, **kwargs)
+
+    patch = pytest.MonkeyPatch()
+    patch.setattr(recommender_module, "StandardScaler", recording_scaler)
+    patch.setattr(recommender_module, "NearestNeighbors", recording_neighbors)
+    patch.setattr(recommender_module.joblib, "dump", recording_dump)
+    run_tracks = synthetic_tracks.copy(deep=True)
+    before = run_tracks.copy(deep=True)
+    try:
+        summary = project_module.build_recommender_demo(
+            run_tracks,
+            paths,
+            n_examples=5,
+            n_neighbors=TOP_N,
+        )
+    finally:
+        patch.undo()
+    return _load_run(
         paths,
-        n_examples=5,
-        n_neighbors=TOP_N,
+        summary,
+        input_unchanged=run_tracks.equals(before),
+        scaler_constructions=scaler_constructions,
+        neighbor_constructions=neighbor_constructions,
+        joblib_dump_order=joblib_dump_order,
     )
-    return _load_run(paths, summary)
 
 
 @pytest.fixture(scope="session")
@@ -380,8 +493,103 @@ def _filtered_query(
     return selected_indexes, selected_distances
 
 
+def test_public_recommender_function_identity(project_module: ModuleType) -> None:
+    assert (
+        project_module.build_recommender_demo
+        is recommender_module.build_recommender_demo
+    )
+
+
+def test_recommender_import_has_no_side_effects(
+    project_root: Path,
+    tmp_path: Path,
+) -> None:
+    working = tmp_path / "working"
+    working.mkdir()
+    script = """
+import json
+from pathlib import Path
+
+import joblib
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
+
+calls = []
+def forbidden_fit(self, *args, **kwargs):
+    calls.append("fit")
+    raise AssertionError("model fit during import")
+def forbidden_fit_transform(self, *args, **kwargs):
+    calls.append("fit_transform")
+    raise AssertionError("scaler fit during import")
+def forbidden_dump(*args, **kwargs):
+    calls.append("dump")
+    raise AssertionError("artifact write during import")
+NearestNeighbors.fit = forbidden_fit
+StandardScaler.fit = forbidden_fit
+StandardScaler.fit_transform = forbidden_fit_transform
+joblib.dump = forbidden_dump
+before = sorted(path.relative_to(Path.cwd()).as_posix() for path in Path.cwd().rglob("*"))
+import src.recommender
+after = sorted(path.relative_to(Path.cwd()).as_posix() for path in Path.cwd().rglob("*"))
+print(json.dumps({"before": before, "after": after, "calls": calls}))
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(project_root), env.get("PYTHONPATH")) if value
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=working,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+    assert result == {"before": [], "after": [], "calls": []}
+
+
+def test_recommender_dependency_boundary(
+    project_root: Path,
+    tmp_path: Path,
+) -> None:
+    script = """
+import importlib
+import json
+import sys
+
+before = set(sys.modules)
+importlib.import_module("src.recommender")
+introduced = set(sys.modules) - before
+forbidden = [
+    "matplotlib", "seaborn", "plotly", "sqlite3", "src.eda",
+    "src.visualization", "src.regression", "spotify_week7_analysis",
+]
+loaded = sorted(
+    module
+    for module in introduced
+    if any(module == name or module.startswith(name + ".") for name in forbidden)
+)
+print(json.dumps(loaded))
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        value for value in (str(project_root), env.get("PYTHONPATH")) if value
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(completed.stdout) == []
+
+
 def test_recommender_constants(project_module: ModuleType) -> None:
     assert project_module.RECOMMENDER_FEATURES == FEATURES
+    assert recommender_module.RECOMMENDER_FEATURES == FEATURES
 
 
 def test_validation_helpers_are_publicly_integrated(project_module: ModuleType) -> None:
@@ -610,6 +818,67 @@ def test_canonical_artifact_structures(
     assert np.isfinite(neighbors._fit_X).all()
 
 
+def test_recommender_input_is_immutable(
+    temporary_recommender_run: RecommenderRun,
+) -> None:
+    assert temporary_recommender_run.input_unchanged
+
+
+def test_pre_post_extraction_equivalence(
+    temporary_recommender_run: RecommenderRun,
+) -> None:
+    run = temporary_recommender_run
+    path_keys = {"validation_file", "catalog_file"}
+    summary_semantics = {
+        key: value for key, value in run.summary.items() if key not in path_keys
+    }
+    assert summary_semantics == BASELINE_SUMMARY_SEMANTICS
+    assert Path(run.summary["validation_file"]).name == "recommendation_validation.csv"
+    assert Path(run.summary["catalog_file"]).name == ARTIFACT_NAMES["catalog"]
+    assert _frame_fingerprint(run.results) == BASELINE_FRAME_FINGERPRINTS["results"]
+    assert (
+        _frame_fingerprint(run.validation)
+        == BASELINE_FRAME_FINGERPRINTS["validation"]
+    )
+    assert _frame_fingerprint(run.catalog) == BASELINE_FRAME_FINGERPRINTS["catalog"]
+    assert run.feature_text == BASELINE_FEATURE_JSON
+    assert run.features == FEATURES
+    assert run.scaler.get_params() == {
+        "copy": True,
+        "with_mean": True,
+        "with_std": True,
+    }
+    np.testing.assert_allclose(run.scaler.mean_, BASELINE_SCALER_MEAN, rtol=0, atol=0)
+    np.testing.assert_allclose(run.scaler.scale_, BASELINE_SCALER_SCALE, rtol=0, atol=0)
+    np.testing.assert_allclose(run.scaler.var_, BASELINE_SCALER_VAR, rtol=0, atol=0)
+    assert run.scaler.n_features_in_ == len(FEATURES)
+    assert run.neighbors.get_params() == {
+        "algorithm": "auto",
+        "leaf_size": 30,
+        "metric": "cosine",
+        "metric_params": None,
+        "n_jobs": None,
+        "n_neighbors": 160,
+        "p": 2,
+        "radius": 1.0,
+    }
+    assert run.neighbors.n_samples_fit_ == 160
+    assert run.neighbors.n_features_in_ == len(FEATURES)
+    assert (
+        _array_fingerprint(run.neighbors._fit_X)
+        == BASELINE_FITTED_MATRIX_FINGERPRINT
+    )
+    assert run.scaler_constructions == ({"args": (), "kwargs": {}},)
+    assert run.neighbor_constructions == (
+        {"args": (), "kwargs": {"n_neighbors": 160, "metric": "cosine"}},
+    )
+    assert run.joblib_dump_order == (
+        ARTIFACT_NAMES["scaler"],
+        ARTIFACT_NAMES["neighbors"],
+    )
+    assert run.validation[VALIDATION_BOOLEAN_COLUMNS].all().all()
+
+
 def test_row_aligned_catalog_artifact_exists(
     canonical_recommender_outputs: Mapping[str, Any],
 ) -> None:
@@ -648,16 +917,25 @@ def test_row_aligned_catalog_artifact_exists(
         assert str(catalog_row["artists"]) == str(seed.input_artists)
 
 
-def test_temporary_output_manifest(temporary_recommender_run: RecommenderRun) -> None:
-    required = [
-        temporary_recommender_run.paths.tables / "recommendation_demo_results.csv",
-        temporary_recommender_run.paths.tables / "recommendation_validation.csv",
-        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["scaler"],
-        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["neighbors"],
-        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["features"],
-        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["catalog"],
-    ]
-    for path in required:
+def test_exact_temporary_output_manifest(
+    temporary_recommender_run: RecommenderRun,
+) -> None:
+    expected = {
+        "tables/recommendation_demo_results.csv",
+        "tables/recommendation_validation.csv",
+        f"model_artifacts/{ARTIFACT_NAMES['scaler']}",
+        f"model_artifacts/{ARTIFACT_NAMES['neighbors']}",
+        f"model_artifacts/{ARTIFACT_NAMES['features']}",
+        f"model_artifacts/{ARTIFACT_NAMES['catalog']}",
+    }
+    actual = {
+        path.relative_to(temporary_recommender_run.paths.output).as_posix()
+        for path in temporary_recommender_run.paths.output.rglob("*")
+        if path.is_file()
+    }
+    assert actual == expected
+    for relative in sorted(expected):
+        path = temporary_recommender_run.paths.output / relative
         assert path.is_file(), f"Missing temporary recommender output: {path.name}"
         assert path.stat().st_size > 0, f"Empty temporary recommender output: {path.name}"
     assert temporary_recommender_run.features == FEATURES
@@ -667,6 +945,14 @@ def test_temporary_output_manifest(temporary_recommender_run: RecommenderRun) ->
     assert temporary_recommender_run.summary["catalog_rows"] == len(
         temporary_recommender_run.catalog
     )
+
+
+def test_recommender_has_no_open_plotting_state() -> None:
+    assert "matplotlib" not in recommender_module.__dict__
+    assert "plt" not in recommender_module.__dict__
+    import matplotlib.pyplot as plt
+
+    assert plt.get_fignums() == []
 
 
 def test_temporary_seed_vector_alignment(
