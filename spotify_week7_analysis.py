@@ -31,10 +31,30 @@ import argparse
 import ast
 import json
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
+
+from src.config import (
+    BEST_POPULARITY_MODEL_FILENAME,
+    DEFAULT_OUTPUT_DIRNAME,
+    FIGURES_DIRNAME,
+    MODEL_ARTIFACTS_DIRNAME,
+    ProjectPaths,
+    RANDOM_STATE,
+    RECOMMENDER_CATALOG_FILENAME,
+    RECOMMENDER_FEATURES,
+    RECOMMENDER_FEATURES_FILENAME,
+    RECOMMENDER_NEIGHBORS_FILENAME,
+    RECOMMENDER_SCALER_FILENAME,
+    REGRESSION_AUDIO_FEATURES,
+    REGRESSION_EXTENDED_FEATURES,
+    REGRESSION_FEATURES,
+    SQL_DIRNAME,
+    TABLES_DIRNAME,
+    TARGET,
+    TREND_FEATURES,
+)
 
 import joblib
 import matplotlib.pyplot as plt
@@ -50,65 +70,15 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-RANDOM_STATE = 42
-TARGET = "popularity"
-
-REGRESSION_AUDIO_FEATURES = [
-    "danceability",
-    "energy",
-    "acousticness",
-    "valence",
-    "tempo",
-    "loudness",
-    "instrumentalness",
-    "liveness",
-    "speechiness",
-]
-
-REGRESSION_EXTENDED_FEATURES = REGRESSION_AUDIO_FEATURES + [
-    "duration_ms",
-    "year",
-    "explicit",
-    "key",
-    "mode",
-]
-
-REGRESSION_FEATURES = REGRESSION_EXTENDED_FEATURES
-
-RECOMMENDER_FEATURES = [
-    "acousticness",
-    "danceability",
-    "energy",
-    "instrumentalness",
-    "liveness",
-    "loudness",
-    "speechiness",
-    "tempo",
-    "valence",
-]
-
-TREND_FEATURES = ["energy", "danceability", "acousticness", "valence"]
-
-
-@dataclass(frozen=True)
-class ProjectPaths:
-    root: Path
-    output: Path
-    tables: Path
-    figures: Path
-    sql: Path
-    model_artifacts: Path
-
-
-def make_paths(root: Path, output_dir: str = "week7_outputs") -> ProjectPaths:
+def make_paths(root: Path, output_dir: str = DEFAULT_OUTPUT_DIRNAME) -> ProjectPaths:
     output = root / output_dir
     paths = ProjectPaths(
         root=root,
         output=output,
-        tables=output / "tables",
-        figures=output / "figures",
-        sql=output / "sql",
-        model_artifacts=output / "model_artifacts",
+        tables=output / TABLES_DIRNAME,
+        figures=output / FIGURES_DIRNAME,
+        sql=output / SQL_DIRNAME,
+        model_artifacts=output / MODEL_ARTIFACTS_DIRNAME,
     )
     for path in [paths.output, paths.tables, paths.figures, paths.sql, paths.model_artifacts]:
         path.mkdir(parents=True, exist_ok=True)
@@ -612,7 +582,7 @@ def regression_analysis(
 
     joblib.dump(
         selected_pipeline,
-        paths.model_artifacts / "best_popularity_model.joblib",
+        paths.model_artifacts / BEST_POPULARITY_MODEL_FILENAME,
     )
 
     # Actual vs predicted plot.
@@ -744,10 +714,13 @@ def build_recommender_demo(
     if len(catalog) != nn.n_samples_fit_:
         raise ValueError("Recommender catalog row count does not match the fitted model.")
 
-    joblib.dump(scaler, paths.model_artifacts / "recommender_scaler.joblib")
-    joblib.dump(nn, paths.model_artifacts / "nearest_neighbors_recommender.joblib")
-    (paths.model_artifacts / "recommender_features.json").write_text(json.dumps(features, indent=2), encoding="utf-8")
-    catalog_path = paths.model_artifacts / "recommender_catalog.csv"
+    joblib.dump(scaler, paths.model_artifacts / RECOMMENDER_SCALER_FILENAME)
+    joblib.dump(nn, paths.model_artifacts / RECOMMENDER_NEIGHBORS_FILENAME)
+    (paths.model_artifacts / RECOMMENDER_FEATURES_FILENAME).write_text(
+        json.dumps(features, indent=2),
+        encoding="utf-8",
+    )
+    catalog_path = paths.model_artifacts / RECOMMENDER_CATALOG_FILENAME
     save_table(catalog, catalog_path)
 
     demo_inputs = (
@@ -1052,7 +1025,11 @@ def main() -> None:
     run_started_at = datetime.now().astimezone()
     parser = argparse.ArgumentParser(description="Run clean Week 7 Spotify analysis outputs.")
     parser.add_argument("--root", type=Path, default=Path("."), help="Project root folder")
-    parser.add_argument("--output", default="week7_outputs", help="Output folder name")
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT_DIRNAME,
+        help="Output folder name",
+    )
     parser.add_argument(
         "--skip-sql",
         action="store_true",
