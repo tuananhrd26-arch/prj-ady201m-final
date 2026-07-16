@@ -1,121 +1,151 @@
-# Spotify Recommendation Analytics - Run Instructions
+# Spotify Recommendation Analytics — Run Instructions
 
-## 1. Open the project folder
-
-```powershell
-cd "D:\spotify-recommendation-analytics"
-```
-
-## 2. Create a virtual environment
-
-Create the environment once:
-
-```powershell
-py -m venv .venv
-```
-
-Activate it in PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks `Activate.ps1`, use Command Prompt activation:
-
-```powershell
-cmd /c ".venv\Scripts\activate.bat && py spotify_week7_analysis.py --root . --skip-sql"
-```
-
-You can also run the environment's interpreter directly:
-
-```powershell
-.\.venv\Scripts\python.exe spotify_week7_analysis.py --root . --skip-sql
-```
-
-## 3. Install dependencies
-
-After activating the environment:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Without activation:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-## 4. Run the project
-
-Complete pipeline with optional SQLite reference outputs:
-
-```powershell
-py spotify_week7_analysis.py --root .
-```
-
-Main Python analysis without SQLite:
-
-```powershell
-py spotify_week7_analysis.py --root . --skip-sql
-```
-
-Outputs are saved under:
+These commands target Windows PowerShell and the authoritative repository:
 
 ```text
-week7_outputs/
+D:\spotify-recommendation-analytics-cũ
 ```
 
-## 5. Important report files
+## 1. Open and activate the environment
 
-Tables:
-
-```text
-week7_outputs/tables/regression_metrics.csv
-week7_outputs/tables/regression_coefficients.csv
-week7_outputs/tables/decade_feature_summary.csv
-week7_outputs/tables/genre_decade_popularity_pivot.csv
-week7_outputs/tables/correlation_matrix.csv
+```powershell
+cd "D:\spotify-recommendation-analytics-cũ"
+D:\spotify-recommendation-analytics-cũ\.venv\Scripts\Activate.ps1
 ```
 
-Figures:
+All commands below use the activated environment's `python` command.
 
-```text
-week7_outputs/figures/popularity_distribution.png
-week7_outputs/figures/popularity_by_decade_boxplot.png
-week7_outputs/figures/regression_actual_vs_predicted.png
-week7_outputs/figures/regression_residuals.png
-week7_outputs/figures/regression_coefficients.png
+## 2. Run the accepted non-SQL pipeline
+
+```powershell
+python spotify_week7_analysis.py --root . --output week7_outputs --skip-sql
 ```
 
-Run metadata:
+Final acceptance used `--skip-sql`. The team's final report SQL work is
+performed separately in SQL Server.
 
-```text
-week7_outputs/run_summary.json
+To audit without touching the canonical snapshot, use an external absolute
+output path:
+
+```powershell
+python spotify_week7_analysis.py --root . --output D:\spotify-acceptance-output --skip-sql
 ```
 
-## 6. Common issues
+## 3. Optional SQLite reference analysis
+
+The optional six-query SQLite reference module can be run by omitting
+`--skip-sql`:
+
+```powershell
+python spotify_week7_analysis.py --root . --output D:\spotify-sql-reference-output
+```
+
+Use a separate output folder unless you deliberately want to create SQLite
+reference files. SQLite output is not the final SQL Server deliverable, and the
+current SQLite query set does not include a multi-table JOIN.
+
+## 4. Query the persisted recommender
+
+Model index, preferred:
+
+```powershell
+python -m scripts.recommend_song --root . --model-index 19611 --top-n 10
+```
+
+Exact track ID, preferred:
+
+```powershell
+python -m scripts.recommend_song --root . --track-id "<TRACK_ID>" --top-n 10
+```
+
+Exact name and raw artists value:
+
+```powershell
+python -m scripts.recommend_song `
+    --root . `
+    --name "<EXACT_NAME>" `
+    --artists "<EXACT_RAW_ARTISTS>" `
+    --top-n 10
+```
+
+Name-and-artists lookup can be ambiguous when duplicate catalog identity pairs
+exist. Use track ID or model index when possible.
+
+The consumer loads and validates existing artifacts; it never refits the
+scaler or nearest-neighbor model.
+
+## 5. Write recommendation results to CSV
+
+```powershell
+python -m scripts.recommend_song `
+    --root . `
+    --model-index 19611 `
+    --top-n 10 `
+    --output .\recommendations.csv
+```
+
+Without `--output`, the consumer prints results and creates no file.
+
+## 6. Help commands
+
+```powershell
+python spotify_week7_analysis.py --help
+python -m scripts.recommend_song --help
+python scripts\recommend_song.py --help
+```
+
+## 7. Tests
+
+Pipeline-only acceptance:
+
+```powershell
+python -m pytest tests\test_pipeline.py -q
+```
+
+Complete discovered suite:
+
+```powershell
+python -m pytest -q
+```
+
+The accepted suite has 235 passing tests. Existing Joblib loads may display a
+NumPy 2.5 deprecation warning; this upstream warning is known and does not
+indicate a failed test or artifact mismatch.
+
+## 8. Common issues
 
 ### `ModuleNotFoundError`
 
-The command is using a Python installation without the project packages.
-Activate `.venv`, install `requirements.txt`, or use the `.venv` interpreter
-directly.
-
-### PowerShell blocks `Activate.ps1`
-
-Run:
+Confirm the repository environment is activated, or invoke the interpreter
+directly:
 
 ```powershell
-cmd /c ".venv\Scripts\activate.bat && py spotify_week7_analysis.py --root . --skip-sql"
+.\.venv\Scripts\python.exe spotify_week7_analysis.py --help
 ```
 
-### Input file not found
+### PowerShell blocks activation
 
-Confirm that `cleaned_data/data_clean.csv` exists. The additional cleaned CSV
-files provide artist, genre, year, and pivot outputs.
+Use the interpreter directly instead of changing execution policy:
 
-### SQL outputs are not needed
+```powershell
+.\.venv\Scripts\python.exe spotify_week7_analysis.py --root . --output week7_outputs --skip-sql
+```
 
-Use `--skip-sql`. SQLite is an optional reference; the main SQL work is
-completed separately in SQL Server Management Studio.
+### Matplotlib cache warning
+
+For automated acceptance commands, point Matplotlib at a writable directory:
+
+```powershell
+$env:MPLBACKEND = "Agg"
+$env:MPLCONFIGDIR = "D:\spotify-acceptance-output\matplotlib-config"
+```
+
+### Unicode output under redirected Windows consoles
+
+If the repository path contains non-ASCII characters and output is redirected,
+enable UTF-8 mode:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+```

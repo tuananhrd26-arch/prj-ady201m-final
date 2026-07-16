@@ -1,97 +1,183 @@
 # Spotify Recommendation Analytics
 
 Spotify Recommendation Analytics is a reproducible Python project for exploring
-cleaned Spotify track data, comparing popularity regression models, and
-demonstrating content-based music recommendations.
+cleaned Spotify track data, comparing popularity-regression experiments, and
+building and querying a persisted content-based music recommender.
 
-The pipeline includes:
+## Datasets
 
-- exploratory data analysis with Pandas and NumPy;
-- grouped, pivot, and correlation analysis;
-- Linear and Ridge regression using Audio Only and Extended feature sets;
-- a nearest-neighbor recommendation demonstration;
-- report-ready tables and visualizations;
-- optional SQLite reference outputs.
+The pipeline reads the following files from `cleaned_data/`:
 
-## Project structure
+- `data_clean.csv` — track-level data required by every run.
+- `data_by_artist_clean.csv` — artist-level aggregates.
+- `data_by_genres_clean.csv` — genre-level aggregates.
+- `data_by_year_clean.csv` — year-level aggregates.
+- `data_w_genres_clean.csv` — artist-to-genre data used by the genre pivot.
+- `cleaning_report.json` and `feature_selection_report.json` — cleaning metadata.
+
+Pipeline code never rewrites these inputs.
+
+## Architecture
 
 ```text
 spotify-recommendation-analytics/
-|-- cleaned_data/
-|   |-- data_clean.csv
-|   |-- data_by_artist_clean.csv
-|   |-- data_by_genres_clean.csv
-|   |-- data_by_year_clean.csv
-|   |-- data_w_genres_clean.csv
-|   |-- cleaning_report.json
-|   `-- feature_selection_report.json
-|-- week7_outputs/
-|   |-- figures/
-|   |-- tables/
-|   `-- run_summary.json
-|-- spotify_week7_analysis.py
-|-- requirements.txt
+|-- cleaned_data/                  # Read-only cleaned inputs
+|-- src/
+|   |-- config.py                  # Stable constants and ProjectPaths
+|   |-- data_loader.py             # Dataset discovery and loading
+|   |-- preprocessing.py           # Track preparation
+|   |-- validation.py              # Shared validation contracts
+|   |-- eda.py                     # Pure EDA calculations
+|   |-- visualization.py           # Static and interactive figures
+|   |-- regression.py              # Regression experiments and artifact
+|   |-- recommender.py              # Recommender training and persistence
+|   |-- recommender_consumer.py     # Read-only artifact loading and queries
+|   |-- sql_analysis.py             # Optional SQLite reference analysis
+|   `-- pipeline.py                 # Reusable end-to-end orchestration
+|-- scripts/
+|   `-- recommend_song.py           # Read-only recommender CLI
+|-- tests/                          # Characterization and acceptance suites
+|-- spotify_week7_analysis.py       # Public pipeline CLI and compatibility API
 |-- RUN_INSTRUCTIONS.md
-`-- REPORT_WEEK7_DRAFT.md
+`-- FINAL_ACCEPTANCE.md
 ```
 
-## Installation
+`src.pipeline.run_pipeline` is the single reusable orchestration path. It
+creates paths, loads data, produces EDA outputs, runs regression, builds the
+recommender, optionally runs SQLite reference queries, writes the run summary,
+and returns an acceptance-friendly result dictionary.
 
-Create and activate a virtual environment, then install the dependencies:
+`spotify_week7_analysis.py` remains the public command and backward-compatible
+import entry point. Analysis implementations remain in their focused modules.
+
+## Run the accepted pipeline
+
+Activate the repository environment, then run the accepted non-SQL pipeline:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python spotify_week7_analysis.py --root . --output week7_outputs --skip-sql
 ```
 
-## Run the analysis
-
-Run the complete pipeline, including optional SQLite reference outputs:
+For a preservation audit, use an absolute output path outside the repository:
 
 ```powershell
-py spotify_week7_analysis.py --root .
+python spotify_week7_analysis.py --root . --output D:\spotify-acceptance-output --skip-sql
 ```
 
-Run the main Python analysis without SQLite:
+The final Python acceptance uses `--skip-sql`. See the SQL status below.
 
-```powershell
-py spotify_week7_analysis.py --root . --skip-sql
-```
+## Output structure
 
-Generated outputs are written to:
+A current non-SQL run creates 31 files:
 
 ```text
-week7_outputs/
+<output>/
+|-- tables/             # 15 CSV files: 10 EDA, 3 regression, 2 recommender
+|-- figures/            # 9 PNG files and 1 Plotly HTML file
+|-- model_artifacts/    # 5 persisted regression/recommender artifacts
+|-- sql/                # Empty when --skip-sql is used
+`-- run_summary.json
 ```
 
-## Important outputs
+Important tables include:
 
-- `week7_outputs/tables/regression_metrics.csv`
-- `week7_outputs/tables/regression_coefficients.csv`
-- `week7_outputs/tables/decade_feature_summary.csv`
-- `week7_outputs/tables/genre_decade_popularity_pivot.csv`
-- `week7_outputs/figures/popularity_distribution.png`
-- `week7_outputs/figures/popularity_by_decade_boxplot.png`
-- `week7_outputs/figures/regression_actual_vs_predicted.png`
-- `week7_outputs/figures/regression_residuals.png`
-- `week7_outputs/figures/regression_coefficients.png`
-- `week7_outputs/run_summary.json`
+- `regression_metrics.csv`
+- `regression_coefficients.csv`
+- `regression_actual_vs_predicted.csv`
+- `recommendation_demo_results.csv`
+- `recommendation_validation.csv`
+- `genre_decade_popularity_pivot.csv`
+- `correlation_matrix.csv`
 
-## Regression results
+## Regression experiments
 
-| Feature set | Model | R² |
-|---|---|---:|
-| Audio Only | Linear Regression | 0.4442 |
-| Audio Only | Ridge Regression | 0.4442 |
-| Extended | Linear Regression | 0.7594 |
-| Extended | Ridge Regression | 0.7594 |
+| Feature set | Model | MAE | RMSE | R² |
+|---|---|---:|---:|---:|
+| Audio Only | Linear Regression | 13.1118 | 16.3080 | 0.4442 |
+| Audio Only | Ridge Regression | 13.1119 | 16.3080 | 0.4442 |
+| Extended | Linear Regression | 7.9820 | 10.7308 | 0.7594 |
+| Extended | Ridge Regression | 7.9821 | 10.7309 | 0.7594 |
 
-The Extended feature set substantially improves popularity prediction compared
-with the Audio Only feature set.
+The accepted best model is Extended Linear Regression. Its persisted
+scikit-learn `Pipeline` contains `scaler` and `model` steps and uses the ordered
+14-feature Extended contract.
 
-## SQL note
+## Recommender and persisted artifacts
 
-The group's main SQL analysis is completed separately in SQL Server Management
-Studio. SQLite and SQL files produced by the Python script are optional
-reference outputs and are excluded from Git by default.
+The recommender uses nine ordered features:
+
+1. `acousticness`
+2. `danceability`
+3. `energy`
+4. `instrumentalness`
+5. `liveness`
+6. `loudness`
+7. `speechiness`
+8. `tempo`
+9. `valence`
+
+The model-artifact directory contains:
+
+- `best_popularity_model.joblib`
+- `recommender_scaler.joblib`
+- `nearest_neighbors_recommender.joblib`
+- `recommender_features.json`
+- `recommender_catalog.csv`
+
+The catalog contains 170,653 rows and preserves the fitted model index, track
+identity, metadata, and feature order.
+
+## Read-only recommendation consumer
+
+`scripts.recommend_song` loads the persisted catalog, scaler, and neighbor model
+and validates their alignment. It never calls `fit` or rewrites an artifact.
+
+Prefer a unique track ID or model index:
+
+```powershell
+python -m scripts.recommend_song --root . --model-index 19611 --top-n 10
+python -m scripts.recommend_song --root . --track-id "47EiUVwUp4C9fGccaPuUCS" --top-n 10
+```
+
+Exact name-and-artists selection is also supported:
+
+```powershell
+python -m scripts.recommend_song --root . --name "Dakiti" --artists "['Bad Bunny', 'Jhay Cortez']" --top-n 10
+```
+
+This selector can be ambiguous when the catalog contains duplicate identity
+pairs. ID or model index is preferred. Add `--output recommendations.csv` only
+when a CSV is wanted; without `--output`, the consumer is read-only.
+
+## Tests
+
+```powershell
+python -m pytest tests/test_pipeline.py -q
+python -m pytest -q
+```
+
+The accepted suite contains 235 passing tests. Joblib currently emits an
+upstream NumPy 2.5 deprecation warning while loading persisted arrays; the
+warning does not affect artifact validation or predictions and is intentionally
+not suppressed.
+
+## Reproducibility
+
+- Feature order and artifact filenames are centralized in `src/config.py`.
+- Random state is fixed where model training requires it.
+- Dataframe inputs are copied before transformations that could mutate them.
+- Acceptance output should be generated outside the repository when comparing
+  against the canonical `week7_outputs/` snapshot.
+- PNG, Plotly, and Joblib files are compared semantically rather than by binary
+  hash; deterministic CSVs and model predictions are compared strictly.
+
+## SQL status
+
+`src/sql_analysis.py` provides an optional, tested SQLite reference analysis
+containing the existing six-query contract. It does not contain a multi-table
+JOIN query, and no JOIN was added during final acceptance.
+
+Final report SQL exercises will be executed separately by the project team in
+SQL Server. The final Python acceptance pipeline therefore uses `--skip-sql`.
+The absence of canonical SQLite CSV files under `week7_outputs/sql/` is
+intentional for this acceptance.
