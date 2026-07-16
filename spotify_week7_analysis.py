@@ -28,12 +28,11 @@ Outputs are saved to:
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List
 
 from src.config import (
     BEST_POPULARITY_MODEL_FILENAME,
@@ -56,6 +55,22 @@ from src.config import (
     TREND_FEATURES,
 )
 from src.data_loader import load_project_data, read_csv_if_exists
+from src.eda import (
+    compute_audio_feature_trends_by_year,
+    compute_correlation_matrix,
+    compute_dataset_overview,
+    compute_decade_explicit_summary,
+    compute_decade_feature_summary,
+    compute_descriptive_statistics,
+    compute_missing_values_summary,
+    compute_popularity_by_decade,
+    compute_top_genres_audio_profile,
+    compute_track_counts_by_decade,
+    compute_tracks_by_decade_summary,
+    create_genre_decade_pivot,
+    parse_artist_names,
+    prepare_interactive_energy_loudness_data,
+)
 from src.preprocessing import clean_tracks_for_analysis
 from src.validation import (
     feature_order_matches,
@@ -102,8 +117,7 @@ def save_table(df: pd.DataFrame, path: Path) -> None:
 
 
 def plot_tracks_by_decade(tracks: pd.DataFrame, fig_path: Path) -> None:
-    decade_counts = tracks.groupby("decade", as_index=False).size()
-    decade_counts = decade_counts.rename(columns={"size": "track_count"})
+    decade_counts = compute_track_counts_by_decade(tracks)
 
     plt.figure(figsize=(10, 5))
     plt.bar(decade_counts["decade"].astype(str), decade_counts["track_count"])
@@ -131,11 +145,7 @@ def plot_popularity_by_decade_boxplot(
     tracks: pd.DataFrame,
     fig_path: Path,
 ) -> None:
-    decades = sorted(tracks["decade"].dropna().unique())
-    values = [
-        tracks.loc[tracks["decade"] == decade, TARGET].dropna().values
-        for decade in decades
-    ]
+    decades, values = compute_popularity_by_decade(tracks)
 
     plt.figure(figsize=(11, 6))
     plt.boxplot(values, tick_labels=[str(int(decade)) for decade in decades], showfliers=False)
@@ -149,7 +159,7 @@ def plot_popularity_by_decade_boxplot(
 
 
 def plot_feature_trends(tracks: pd.DataFrame, fig_path: Path) -> pd.DataFrame:
-    trend = tracks.groupby("year", as_index=False)[TREND_FEATURES].mean()
+    trend = compute_audio_feature_trends_by_year(tracks)
 
     plt.figure(figsize=(10, 5))
     for feature in TREND_FEATURES:
@@ -166,7 +176,7 @@ def plot_feature_trends(tracks: pd.DataFrame, fig_path: Path) -> pd.DataFrame:
 
 
 def plot_correlation_heatmap(tracks: pd.DataFrame, features: List[str], fig_path: Path) -> pd.DataFrame:
-    corr = tracks[features].corr(numeric_only=True)
+    corr = compute_correlation_matrix(tracks, features)
 
     plt.figure(figsize=(9, 7))
     im = plt.imshow(corr.values, aspect="auto", vmin=-1, vmax=1)
@@ -192,19 +202,13 @@ def plot_interactive_energy_loudness(
     preview_path: Path,
     sample_size: int = 10000,
 ) -> str:
-    required_cols = ["energy", "loudness", "decade", "name", "artists", TARGET, "year", "danceability"]
-    missing_cols = [col for col in required_cols if col not in tracks.columns]
-    if missing_cols:
-        return "Interactive Plotly scatter skipped: missing columns " + ", ".join(missing_cols)
+    plot_df, skip_reason = prepare_interactive_energy_loudness_data(
+        tracks,
+        sample_size,
+    )
+    if plot_df is None:
+        return str(skip_reason)
 
-    plot_df = tracks.dropna(subset=required_cols).copy()
-    if plot_df.empty:
-        return "Interactive Plotly scatter skipped: no complete rows available."
-
-    if len(plot_df) > sample_size:
-        plot_df = plot_df.sample(sample_size, random_state=RANDOM_STATE)
-
-    plot_df["decade"] = plot_df["decade"].astype(int).astype(str)
     fig = px.scatter(
         plot_df,
         x="energy",
@@ -232,108 +236,19 @@ def plot_interactive_energy_loudness(
     return "Interactive Plotly HTML and static PNG preview created successfully."
 
 
-def parse_artist_names(value: Any) -> List[str]:
-    """Convert the serialized artist list in the track data to clean names."""
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if not isinstance(value, str) or not value.strip():
-        return []
-
-    try:
-        parsed = ast.literal_eval(value)
-    except (SyntaxError, ValueError):
-        return [value.strip()]
-
-    if isinstance(parsed, (list, tuple)):
-        return [str(item).strip() for item in parsed if str(item).strip()]
-    return [str(parsed).strip()]
-
-
-def create_genre_decade_pivot(
-    tracks: pd.DataFrame,
-    artist_genres: pd.DataFrame,
-    max_genres: int = 30,
-) -> Tuple[pd.DataFrame | None, str]:
-    """Build a report-sized genre-by-decade popularity pivot via artist matching."""
-    required_track_cols = {"artists", "decade", TARGET}
-    required_genre_cols = {"artists", "genres_clean"}
-    if not required_track_cols.issubset(tracks.columns):
-        return None, "Genre pivot skipped: track-level artist/decade/popularity columns are incomplete."
-    if not required_genre_cols.issubset(artist_genres.columns):
-        return None, "Genre pivot skipped: artist-to-genre columns are incomplete."
-
-    track_artist = tracks[["artists", "decade", TARGET]].copy()
-    track_artist["artist"] = track_artist["artists"].map(parse_artist_names)
-    track_artist = track_artist.explode("artist").dropna(subset=["artist"])
-    track_artist = track_artist.drop(columns="artists")
-
-    genre_lookup = artist_genres[["artists", "genres_clean"]].copy()
-    genre_lookup = genre_lookup.dropna(subset=["artists", "genres_clean"])
-    genre_lookup["genre"] = genre_lookup["genres_clean"].astype(str).str.split(";")
-    genre_lookup = genre_lookup.explode("genre")
-    genre_lookup["artist"] = genre_lookup["artists"].astype(str).str.strip()
-    genre_lookup["genre"] = genre_lookup["genre"].astype(str).str.strip()
-    genre_lookup = genre_lookup.loc[genre_lookup["genre"] != "", ["artist", "genre"]]
-    genre_lookup = genre_lookup.drop_duplicates()
-
-    matched = track_artist.merge(genre_lookup, on="artist", how="inner")
-    if matched.empty:
-        return None, "Genre pivot skipped: no track artists matched the artist-to-genre data."
-
-    top_genres = (
-        matched.groupby("genre")
-        .size()
-        .nlargest(max_genres)
-        .index
-    )
-    matched = matched[matched["genre"].isin(top_genres)]
-    pivot = matched.pivot_table(
-        index="genre",
-        columns="decade",
-        values=TARGET,
-        aggfunc="mean",
-    )
-    pivot = pivot.sort_index().rename(
-        columns={decade: str(int(decade)) for decade in pivot.columns}
-    )
-    pivot = pivot.reset_index()
-    note = (
-        f"Genre pivot created for the {len(top_genres)} genres with the most "
-        "track-artist matches."
-    )
-    return pivot, note
-
-
 def create_eda_outputs(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> pd.DataFrame:
     tracks = clean_tracks_for_analysis(data["tracks"])
 
-    overview = pd.DataFrame(
-        [
-            {"table": name, "rows": len(frame), "columns": frame.shape[1]}
-            for name, frame in data.items()
-        ]
-    )
+    overview = compute_dataset_overview(data)
     save_table(overview, paths.tables / "dataset_overview.csv")
 
-    descriptive_features = [f for f in REGRESSION_FEATURES + [TARGET] if f in tracks.columns]
-    descriptive = tracks[descriptive_features].describe().T.reset_index().rename(columns={"index": "feature"})
+    descriptive = compute_descriptive_statistics(tracks)
     save_table(descriptive, paths.tables / "descriptive_statistics.csv")
 
-    missing = (
-        tracks.isna()
-        .sum()
-        .sort_values(ascending=False)
-        .reset_index()
-        .rename(columns={"index": "column", 0: "missing_count"})
-    )
-    missing["missing_rate"] = missing["missing_count"] / len(tracks)
+    missing = compute_missing_values_summary(tracks)
     save_table(missing, paths.tables / "missing_values_after_cleaning.csv")
 
-    decade_summary = (
-        tracks.groupby("decade", as_index=False)
-        .agg(track_count=("id", "count"), avg_popularity=(TARGET, "mean"))
-        .round(3)
-    )
+    decade_summary = compute_tracks_by_decade_summary(tracks)
     save_table(decade_summary, paths.tables / "tracks_by_decade.csv")
     plot_tracks_by_decade(tracks, paths.figures / "tracks_by_decade.png")
     plot_popularity_distribution(
@@ -345,18 +260,7 @@ def create_eda_outputs(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> pd
         paths.figures / "popularity_by_decade_boxplot.png",
     )
 
-    decade_feature_summary = (
-        tracks.groupby("decade", as_index=False)
-        .agg(
-            total_tracks=(TARGET, "size"),
-            avg_popularity=(TARGET, "mean"),
-            avg_energy=("energy", "mean"),
-            avg_danceability=("danceability", "mean"),
-            avg_acousticness=("acousticness", "mean"),
-            avg_valence=("valence", "mean"),
-        )
-        .round(4)
-    )
+    decade_feature_summary = compute_decade_feature_summary(tracks)
     save_table(
         decade_feature_summary,
         paths.tables / "decade_feature_summary.csv",
@@ -370,19 +274,9 @@ def create_eda_outputs(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> pd
     save_table(corr.round(4), paths.tables / "correlation_matrix.csv")
 
     if {"decade", "explicit"}.issubset(tracks.columns):
-        decade_explicit_summary = (
-            tracks.groupby(["decade", "explicit"])
-            .agg(
-                total_tracks=(TARGET, "size"),
-                average_popularity=(TARGET, "mean"),
-                average_energy=("energy", "mean"),
-                average_danceability=("danceability", "mean"),
-                average_acousticness=("acousticness", "mean"),
-            )
-            .round(4)
-        )
+        decade_explicit_summary = compute_decade_explicit_summary(tracks)
         save_table(
-            decade_explicit_summary.reset_index(),
+            decade_explicit_summary,
             paths.tables / "decade_explicit_multiindex_summary.csv",
         )
 
@@ -393,11 +287,7 @@ def create_eda_outputs(data: Dict[str, pd.DataFrame], paths: ProjectPaths) -> pd
     )
 
     if "genre_features" in data:
-        genre_df = data["genre_features"].copy()
-        genre_name_col = "genres_clean" if "genres_clean" in genre_df.columns else "genres"
-        profile_cols = [genre_name_col, "popularity", "energy", "danceability", "acousticness", "valence", "tempo"]
-        profile_cols = [c for c in profile_cols if c in genre_df.columns]
-        genre_profile = genre_df[profile_cols].dropna(subset=[genre_name_col]).sort_values("popularity", ascending=False).head(20)
+        genre_profile = compute_top_genres_audio_profile(data["genre_features"])
         save_table(genre_profile.round(4), paths.tables / "top_genres_audio_profile.csv")
 
     genre_pivot_note = "Genre pivot skipped: artist-to-genre data was not loaded."
