@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from collections.abc import Generator, Mapping
 from pathlib import Path
@@ -12,6 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from pandas.api.types import is_numeric_dtype
+
+from src.data_loader import load_project_data, read_csv_if_exists
 
 
 REQUIRED_CLEANED_FILES = {
@@ -143,6 +146,14 @@ UNIT_INTERVAL_FEATURES = (
     "valence",
 )
 
+LOADER_PATHS = {
+    "tracks": Path("cleaned_data") / "data_clean.csv",
+    "artist_features": Path("cleaned_data") / "data_by_artist_clean.csv",
+    "genre_features": Path("cleaned_data") / "data_by_genres_clean.csv",
+    "year_features": Path("cleaned_data") / "data_by_year_clean.csv",
+    "artist_genres": Path("cleaned_data") / "data_w_genres_clean.csv",
+}
+
 
 @pytest.fixture(scope="session")
 def project_root() -> Path:
@@ -164,12 +175,28 @@ def loaded_datasets(cleaned_data_dir: Path) -> Mapping[str, pd.DataFrame]:
     }
 
 
+@pytest.fixture(scope="session")
+def project_loader_result(
+    project_root: Path,
+) -> tuple[dict[str, pd.DataFrame], dict[str, Path]]:
+    """Load the authoritative project collection once through the public loader."""
+    return load_project_data(project_root)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _tree_manifest(root: Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): _sha256(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -187,6 +214,151 @@ def cleaned_files_are_read_only(cleaned_data_dir: Path) -> Generator[None, None,
         if path.is_file()
     }
     assert after == before, "The test session changed one or more cleaned-data files"
+
+
+def test_read_csv_if_exists_loads_existing_file_without_modification(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "optional.csv"
+    expected = pd.DataFrame({"name": ["Alpha", "Beta"], "value": [1, 2]})
+    expected.to_csv(source, index=False)
+    before = _sha256(source)
+
+    actual = read_csv_if_exists(source)
+
+    assert actual is not None
+    pd.testing.assert_frame_equal(actual, expected)
+    assert _sha256(source) == before
+
+
+def test_read_csv_if_exists_returns_none_without_creating_paths(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "missing" / "optional.csv"
+    assert not source.parent.exists()
+
+    assert read_csv_if_exists(source) is None
+
+    assert not source.exists()
+    assert not source.parent.exists()
+
+
+def test_load_project_data_authoritative_contract(
+    project_root: Path,
+    project_loader_result: tuple[dict[str, pd.DataFrame], dict[str, Path]],
+) -> None:
+    data, input_files = project_loader_result
+    expected_keys = list(LOADER_PATHS)
+    loader_shapes = {
+        key: EXPECTED_SHAPES[path.name]
+        for key, path in LOADER_PATHS.items()
+    }
+
+    assert list(data) == expected_keys
+    assert list(input_files) == expected_keys
+    assert {key: frame.shape for key, frame in data.items()} == loader_shapes
+    for key, relative_path in LOADER_PATHS.items():
+        expected_path = project_root / relative_path
+        assert input_files[key] == expected_path
+        assert input_files[key].resolve() == expected_path.resolve()
+    assert data["tracks"].shape == (170653, 20)
+    assert data["tracks"].columns.tolist() == EXPECTED_COLUMNS["data_clean.csv"]
+    assert "decade" not in data["tracks"].columns
+
+
+def test_load_project_data_temporary_cleaned_layout(tmp_path: Path) -> None:
+    cleaned = tmp_path / "cleaned_data"
+    cleaned.mkdir()
+    main = pd.DataFrame({"id": ["track-1"], "name": ["Track One"]})
+    artists = pd.DataFrame({"artists": ["Artist One"], "count": [1]})
+    years = pd.DataFrame({"year": [2001], "popularity": [50]})
+    main.to_csv(cleaned / "data_clean.csv", index=False)
+    artists.to_csv(cleaned / "data_by_artist_clean.csv", index=False)
+    years.to_csv(cleaned / "data_by_year_clean.csv", index=False)
+
+    data, input_files = load_project_data(tmp_path)
+
+    assert list(data) == ["tracks", "artist_features", "year_features"]
+    assert list(input_files) == ["tracks", "artist_features", "year_features"]
+    pd.testing.assert_frame_equal(data["tracks"], main)
+    pd.testing.assert_frame_equal(data["artist_features"], artists)
+    pd.testing.assert_frame_equal(data["year_features"], years)
+    assert input_files == {
+        "tracks": cleaned / "data_clean.csv",
+        "artist_features": cleaned / "data_by_artist_clean.csv",
+        "year_features": cleaned / "data_by_year_clean.csv",
+    }
+    assert "genre_features" not in data
+    assert "artist_genres" not in data
+
+
+def test_load_project_data_uses_fallback_main_dataset(tmp_path: Path) -> None:
+    fallback_dir = tmp_path / "data"
+    fallback_dir.mkdir()
+    fallback = fallback_dir / "data.csv"
+    expected = pd.DataFrame({"id": ["fallback-1"], "name": ["Fallback Track"]})
+    expected.to_csv(fallback, index=False)
+
+    data, input_files = load_project_data(tmp_path)
+
+    assert list(data) == ["tracks"]
+    assert list(input_files) == ["tracks"]
+    pd.testing.assert_frame_equal(data["tracks"], expected)
+    assert input_files["tracks"] == fallback
+
+
+def test_load_project_data_raises_when_main_dataset_is_missing(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        FileNotFoundError,
+        match=r"cleaned_data/data_clean\.csv or data/data\.csv",
+    ):
+        load_project_data(tmp_path)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_load_project_data_has_no_write_side_effects(tmp_path: Path) -> None:
+    cleaned = tmp_path / "cleaned_data"
+    cleaned.mkdir()
+    pd.DataFrame({"id": ["track-1"], "name": ["Track One"]}).to_csv(
+        cleaned / "data_clean.csv",
+        index=False,
+    )
+    pd.DataFrame({"artists": ["Artist One"]}).to_csv(
+        cleaned / "data_by_artist_clean.csv",
+        index=False,
+    )
+    before_files = _tree_manifest(tmp_path)
+    before_dirs = {
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+        if path.is_dir()
+    }
+
+    load_project_data(tmp_path)
+
+    assert _tree_manifest(tmp_path) == before_files
+    assert {
+        path.relative_to(tmp_path).as_posix()
+        for path in tmp_path.rglob("*")
+        if path.is_dir()
+    } == before_dirs
+    assert not (tmp_path / "week7_outputs").exists()
+
+
+def test_loader_functions_remain_public_through_monolith(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mpl_config = tmp_path / "matplotlib-config"
+    mpl_config.mkdir()
+    monkeypatch.setenv("MPLCONFIGDIR", str(mpl_config))
+    public = importlib.import_module("spotify_week7_analysis")
+
+    assert public.load_project_data is load_project_data
+    assert public.read_csv_if_exists is read_csv_if_exists
 
 
 def test_required_cleaned_files_exist(cleaned_data_dir: Path) -> None:
