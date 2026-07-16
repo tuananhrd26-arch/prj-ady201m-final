@@ -63,12 +63,17 @@ ARTIFACT_NAMES = {
     "scaler": "recommender_scaler.joblib",
     "neighbors": "nearest_neighbors_recommender.joblib",
     "features": "recommender_features.json",
+    "catalog": "recommender_catalog.csv",
 }
-CATALOG_ARTIFACT_NAMES = (
-    "recommender_catalog.csv",
-    "recommender_catalog.parquet",
-    "recommender_catalog.joblib",
-)
+CATALOG_COLUMNS = [
+    "_model_index",
+    "id",
+    "name",
+    "artists",
+    "year",
+    "popularity",
+    *FEATURES,
+]
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,7 @@ class RecommenderRun:
     scaler: StandardScaler
     neighbors: NearestNeighbors
     features: list[str]
+    catalog: pd.DataFrame
 
 
 @pytest.fixture(scope="session")
@@ -106,11 +112,6 @@ def project_module(
 
 
 @pytest.fixture(scope="session")
-def canonical_main_data(project_root: Path) -> pd.DataFrame:
-    return pd.read_csv(project_root / "cleaned_data" / "data_clean.csv", low_memory=False)
-
-
-@pytest.fixture(scope="session")
 def canonical_recommender_outputs(project_root: Path) -> Mapping[str, Any]:
     output = project_root / "week7_outputs"
     tables = output / "tables"
@@ -126,6 +127,7 @@ def canonical_recommender_outputs(project_root: Path) -> Mapping[str, Any]:
         "scaler": joblib.load(artifacts / ARTIFACT_NAMES["scaler"]),
         "neighbors": joblib.load(artifacts / ARTIFACT_NAMES["neighbors"]),
         "features": features,
+        "catalog": pd.read_csv(artifacts / ARTIFACT_NAMES["catalog"]),
         "artifact_dir": artifacts,
     }
 
@@ -225,6 +227,7 @@ def _load_run(paths: Any, summary: dict[str, Any]) -> RecommenderRun:
         scaler=joblib.load(paths.model_artifacts / ARTIFACT_NAMES["scaler"]),
         neighbors=joblib.load(paths.model_artifacts / ARTIFACT_NAMES["neighbors"]),
         features=features,
+        catalog=pd.read_csv(paths.model_artifacts / ARTIFACT_NAMES["catalog"]),
     )
 
 
@@ -267,14 +270,6 @@ def _catalog(tracks: pd.DataFrame, features: list[str]) -> pd.DataFrame:
     catalog = tracks.dropna(subset=required).copy().reset_index(drop=True)
     catalog["_model_index"] = catalog.index
     return catalog
-
-
-def _canonical_catalog(
-    project_module: ModuleType,
-    canonical_main_data: pd.DataFrame,
-) -> pd.DataFrame:
-    cleaned = project_module.clean_tracks_for_analysis(canonical_main_data.copy(deep=True))
-    return _catalog(cleaned, FEATURES)
 
 
 def _normalize(value: Any) -> str:
@@ -417,14 +412,11 @@ def test_canonical_validation_manifest(
 
 
 def test_canonical_seed_vector_alignment(
-    project_module: ModuleType,
-    canonical_main_data: pd.DataFrame,
     canonical_recommender_outputs: Mapping[str, Any],
 ) -> None:
-    catalog = _canonical_catalog(project_module, canonical_main_data)
     _assert_seed_alignment(
         canonical_recommender_outputs["results"],
-        catalog,
+        canonical_recommender_outputs["catalog"],
         canonical_recommender_outputs["scaler"],
         canonical_recommender_outputs["neighbors"],
         canonical_recommender_outputs["features"],
@@ -432,13 +424,12 @@ def test_canonical_seed_vector_alignment(
 
 
 def test_canonical_self_exclusion_and_uniqueness(
-    project_module: ModuleType,
-    canonical_main_data: pd.DataFrame,
     canonical_recommender_outputs: Mapping[str, Any],
 ) -> None:
-    catalog = _canonical_catalog(project_module, canonical_main_data)
     _assert_exclusion_and_uniqueness(
-        canonical_recommender_outputs["results"], catalog, TOP_N
+        canonical_recommender_outputs["results"],
+        canonical_recommender_outputs["catalog"],
+        TOP_N,
     )
 
 
@@ -459,14 +450,12 @@ def test_canonical_similarity_relationship(
 
 
 def test_canonical_artifact_structures(
-    project_module: ModuleType,
-    canonical_main_data: pd.DataFrame,
     canonical_recommender_outputs: Mapping[str, Any],
 ) -> None:
     scaler = canonical_recommender_outputs["scaler"]
     neighbors = canonical_recommender_outputs["neighbors"]
     features = canonical_recommender_outputs["features"]
-    catalog = _canonical_catalog(project_module, canonical_main_data)
+    catalog = canonical_recommender_outputs["catalog"]
     assert isinstance(scaler, StandardScaler)
     assert isinstance(neighbors, NearestNeighbors)
     assert neighbors.metric == "cosine"
@@ -480,24 +469,42 @@ def test_canonical_artifact_structures(
     assert np.isfinite(neighbors._fit_X).all()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="The recommender does not yet persist a row-aligned metadata catalog.",
-)
 def test_row_aligned_catalog_artifact_exists(
     canonical_recommender_outputs: Mapping[str, Any],
 ) -> None:
     artifact_dir = canonical_recommender_outputs["artifact_dir"]
-    candidates = [artifact_dir / name for name in CATALOG_ARTIFACT_NAMES if (artifact_dir / name).is_file()]
-    assert candidates, "No supported row-aligned recommender catalog artifact exists"
-    path = candidates[0]
-    if path.suffix == ".csv":
-        catalog = pd.read_csv(path)
-    elif path.suffix == ".parquet":
-        catalog = pd.read_parquet(path)
-    else:
-        catalog = joblib.load(path)
-    assert len(catalog) == canonical_recommender_outputs["neighbors"].n_samples_fit_
+    path = artifact_dir / ARTIFACT_NAMES["catalog"]
+    assert path.is_file()
+
+    catalog = canonical_recommender_outputs["catalog"]
+    scaler = canonical_recommender_outputs["scaler"]
+    neighbors = canonical_recommender_outputs["neighbors"]
+    features = canonical_recommender_outputs["features"]
+    results = canonical_recommender_outputs["results"]
+    required = ["id", "name", "artists", *FEATURES]
+
+    assert not catalog.empty
+    assert catalog.columns.tolist() == CATALOG_COLUMNS
+    assert catalog.shape == (170653, len(CATALOG_COLUMNS))
+    assert catalog["_model_index"].is_unique
+    np.testing.assert_array_equal(
+        catalog["_model_index"].to_numpy(), np.arange(len(catalog))
+    )
+    assert catalog["id"].is_unique
+    assert not catalog[required].isna().any().any()
+    assert np.isfinite(catalog[FEATURES].to_numpy(dtype=float)).all()
+    assert features == FEATURES
+    assert catalog.columns[-len(features):].tolist() == features
+    assert len(catalog) == neighbors.n_samples_fit_
+    transformed = scaler.transform(catalog[features])
+    np.testing.assert_allclose(transformed, neighbors._fit_X, rtol=0, atol=1e-12)
+
+    seeds = results[SEED_COLUMNS].drop_duplicates()
+    assert len(seeds) == 5
+    for seed in seeds.itertuples(index=False):
+        catalog_row = catalog.iloc[int(seed.input_model_index)]
+        assert str(catalog_row["name"]) == str(seed.input_song)
+        assert str(catalog_row["artists"]) == str(seed.input_artists)
 
 
 def test_temporary_output_manifest(temporary_recommender_run: RecommenderRun) -> None:
@@ -507,21 +514,41 @@ def test_temporary_output_manifest(temporary_recommender_run: RecommenderRun) ->
         temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["scaler"],
         temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["neighbors"],
         temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["features"],
+        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["catalog"],
     ]
     for path in required:
         assert path.is_file(), f"Missing temporary recommender output: {path.name}"
         assert path.stat().st_size > 0, f"Empty temporary recommender output: {path.name}"
     assert temporary_recommender_run.features == FEATURES
+    assert Path(temporary_recommender_run.summary["catalog_file"]) == (
+        temporary_recommender_run.paths.model_artifacts / ARTIFACT_NAMES["catalog"]
+    )
+    assert temporary_recommender_run.summary["catalog_rows"] == len(
+        temporary_recommender_run.catalog
+    )
 
 
 def test_temporary_seed_vector_alignment(
     synthetic_tracks: pd.DataFrame,
     temporary_recommender_run: RecommenderRun,
 ) -> None:
-    catalog = _catalog(synthetic_tracks, FEATURES)
+    expected_catalog = _catalog(synthetic_tracks, FEATURES)[CATALOG_COLUMNS]
+    pd.testing.assert_frame_equal(
+        temporary_recommender_run.catalog[
+            ["_model_index", "id", "name", "artists"]
+        ],
+        expected_catalog[["_model_index", "id", "name", "artists"]],
+        check_exact=True,
+    )
+    np.testing.assert_allclose(
+        temporary_recommender_run.catalog[["year", "popularity", *FEATURES]],
+        expected_catalog[["year", "popularity", *FEATURES]],
+        rtol=0,
+        atol=1e-12,
+    )
     _assert_seed_alignment(
         temporary_recommender_run.results,
-        catalog,
+        temporary_recommender_run.catalog,
         temporary_recommender_run.scaler,
         temporary_recommender_run.neighbors,
         temporary_recommender_run.features,
@@ -529,11 +556,13 @@ def test_temporary_seed_vector_alignment(
 
 
 def test_temporary_exclusion_uniqueness_and_top_n(
-    synthetic_tracks: pd.DataFrame,
     temporary_recommender_run: RecommenderRun,
 ) -> None:
-    catalog = _catalog(synthetic_tracks, FEATURES)
-    _assert_exclusion_and_uniqueness(temporary_recommender_run.results, catalog, TOP_N)
+    _assert_exclusion_and_uniqueness(
+        temporary_recommender_run.results,
+        temporary_recommender_run.catalog,
+        TOP_N,
+    )
     validation = temporary_recommender_run.validation
     assert len(validation) == 5
     assert validation["recommendations_returned"].eq(TOP_N).all()
@@ -545,7 +574,6 @@ def test_temporary_exclusion_uniqueness_and_top_n(
 
 
 def test_temporary_similarity_and_validation_fields(
-    synthetic_tracks: pd.DataFrame,
     temporary_recommender_run: RecommenderRun,
 ) -> None:
     results = temporary_recommender_run.results
@@ -559,7 +587,7 @@ def test_temporary_similarity_and_validation_fields(
     )
     assert validation[VALIDATION_BOOLEAN_COLUMNS].all().all()
 
-    catalog = _catalog(synthetic_tracks, FEATURES)
+    catalog = temporary_recommender_run.catalog
     for (seed_name, seed_artists, seed_index), group in _seed_groups(results):
         identities = {
             _identity(row.recommended_song, row.recommended_artists)
@@ -574,13 +602,22 @@ def test_temporary_similarity_and_validation_fields(
 
 
 def test_artifact_reload_reconstructs_saved_queries(
-    synthetic_tracks: pd.DataFrame,
     temporary_recommender_run: RecommenderRun,
 ) -> None:
-    catalog = _catalog(synthetic_tracks, temporary_recommender_run.features)
+    catalog = temporary_recommender_run.catalog
+    assert catalog.columns.tolist() == CATALOG_COLUMNS
+    np.testing.assert_array_equal(
+        catalog["_model_index"].to_numpy(), np.arange(len(catalog))
+    )
     assert len(catalog) == temporary_recommender_run.neighbors.n_samples_fit_
     scaled = temporary_recommender_run.scaler.transform(catalog[temporary_recommender_run.features])
     assert np.isfinite(scaled).all()
+    np.testing.assert_allclose(
+        scaled,
+        temporary_recommender_run.neighbors._fit_X,
+        rtol=0,
+        atol=1e-12,
+    )
     for (_, _, seed_index), group in _seed_groups(temporary_recommender_run.results):
         seed_index = int(seed_index)
         expected_indexes, expected_distances = _filtered_query(
@@ -618,20 +655,23 @@ def test_recommender_is_repeatable(
     second = _load_run(second_paths, second_summary)
     pd.testing.assert_frame_equal(second.results, temporary_recommender_run.results)
     pd.testing.assert_frame_equal(second.validation, temporary_recommender_run.validation)
+    pd.testing.assert_frame_equal(second.catalog, temporary_recommender_run.catalog)
     assert second.features == temporary_recommender_run.features
     np.testing.assert_allclose(second.scaler.mean_, temporary_recommender_run.scaler.mean_)
     np.testing.assert_allclose(second.scaler.scale_, temporary_recommender_run.scaler.scale_)
     assert second.neighbors._fit_X.shape == temporary_recommender_run.neighbors._fit_X.shape
+    path_keys = {"validation_file", "catalog_file"}
     second_semantics = {
-        key: value for key, value in second.summary.items() if key != "validation_file"
+        key: value for key, value in second.summary.items() if key not in path_keys
     }
     first_semantics = {
         key: value
         for key, value in temporary_recommender_run.summary.items()
-        if key != "validation_file"
+        if key not in path_keys
     }
     assert second_semantics == first_semantics
     assert Path(second.summary["validation_file"]).name == "recommendation_validation.csv"
+    assert Path(second.summary["catalog_file"]).name == ARTIFACT_NAMES["catalog"]
 
 
 def test_insufficient_catalog_is_not_validated_as_top_n(
