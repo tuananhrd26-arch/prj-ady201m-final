@@ -55,6 +55,7 @@ from src.config import (
     TARGET,
     TREND_FEATURES,
 )
+from src.data_loader import load_project_data, read_csv_if_exists
 
 import joblib
 import matplotlib.pyplot as plt
@@ -83,43 +84,6 @@ def make_paths(root: Path, output_dir: str = DEFAULT_OUTPUT_DIRNAME) -> ProjectP
     for path in [paths.output, paths.tables, paths.figures, paths.sql, paths.model_artifacts]:
         path.mkdir(parents=True, exist_ok=True)
     return paths
-
-
-def read_csv_if_exists(path: Path) -> pd.DataFrame | None:
-    if not path.exists():
-        return None
-    return pd.read_csv(path)
-
-
-def load_project_data(
-    root: Path,
-) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Path]]:
-    """Load cleaned Spotify CSV files. Falls back to raw data/data.csv if needed."""
-    data: Dict[str, pd.DataFrame] = {}
-    input_files: Dict[str, Path] = {}
-
-    tracks_path = root / "cleaned_data" / "data_clean.csv"
-    if not tracks_path.exists():
-        tracks_path = root / "data" / "data.csv"
-    if not tracks_path.exists():
-        raise FileNotFoundError("Could not find cleaned_data/data_clean.csv or data/data.csv")
-
-    data["tracks"] = pd.read_csv(tracks_path)
-    input_files["tracks"] = tracks_path
-
-    optional_files = {
-        "artist_features": root / "cleaned_data" / "data_by_artist_clean.csv",
-        "genre_features": root / "cleaned_data" / "data_by_genres_clean.csv",
-        "year_features": root / "cleaned_data" / "data_by_year_clean.csv",
-        "artist_genres": root / "cleaned_data" / "data_w_genres_clean.csv",
-    }
-    for name, path in optional_files.items():
-        frame = read_csv_if_exists(path)
-        if frame is not None:
-            data[name] = frame
-            input_files[name] = path
-
-    return data, input_files
 
 
 def clean_tracks_for_analysis(df: pd.DataFrame) -> pd.DataFrame:
