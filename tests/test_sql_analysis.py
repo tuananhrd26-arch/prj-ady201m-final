@@ -63,6 +63,11 @@ def sql_module() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
+def pipeline_module() -> ModuleType:
+    return importlib.import_module("src.pipeline")
+
+
+@pytest.fixture(scope="session")
 def project_module(
     project_root: Path,
     tmp_path_factory: pytest.TempPathFactory,
@@ -391,18 +396,19 @@ def test_synthetic_inputs_are_immutable(
 
 def test_skip_sql_compatibility(
     project_module: ModuleType,
+    pipeline_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     tracks = pd.DataFrame({"name": ["x"]})
-    monkeypatch.setattr(project_module, "load_project_data", lambda root: ({"tracks": tracks}, {}))
-    monkeypatch.setattr(project_module, "create_eda_outputs", lambda data, paths: tracks)
-    monkeypatch.setattr(project_module, "regression_analysis", lambda tracks, paths: {"models_trained": [], "best_model": {}, "plot_model": {}})
-    monkeypatch.setattr(project_module, "build_recommender_demo", lambda tracks, paths: {})
-    monkeypatch.setattr(project_module, "write_run_summary", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline_module, "load_project_data", lambda root: ({"tracks": tracks}, {}))
+    monkeypatch.setattr(pipeline_module, "create_eda_outputs", lambda data, paths: tracks)
+    monkeypatch.setattr(pipeline_module, "regression_analysis", lambda tracks, paths: {"models_trained": [], "best_model": {}, "plot_model": {}})
+    monkeypatch.setattr(pipeline_module, "build_recommender_demo", lambda tracks, paths: {})
+    monkeypatch.setattr(pipeline_module, "write_run_summary", lambda **kwargs: None)
     monkeypatch.setattr(
-        project_module,
+        pipeline_module,
         "create_sqlite_database",
         lambda *args, **kwargs: pytest.fail("SQL executed despite --skip-sql"),
     )

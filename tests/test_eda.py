@@ -227,6 +227,11 @@ def project_module(
 
 
 @pytest.fixture(scope="session")
+def pipeline_module() -> ModuleType:
+    return importlib.import_module("src.pipeline")
+
+
+@pytest.fixture(scope="session")
 def canonical_project_data(
     project_root: Path,
 ) -> Mapping[str, pd.DataFrame]:
@@ -653,6 +658,7 @@ def test_eda_helpers_are_integrated_publicly(project_module: ModuleType) -> None
 
 def test_create_eda_outputs_preserves_absent_auxiliary_dataset_behavior(
     project_module: ModuleType,
+    pipeline_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -672,18 +678,18 @@ def test_create_eda_outputs_preserves_absent_auxiliary_dataset_behavior(
     )
     before = tracks.copy(deep=True)
     paths = project_module.make_paths(tmp_path, "outputs")
-    monkeypatch.setattr(project_module, "plot_tracks_by_decade", lambda *_: None)
-    monkeypatch.setattr(project_module, "plot_popularity_distribution", lambda *_: None)
+    monkeypatch.setattr(pipeline_module, "plot_tracks_by_decade", lambda *_: None)
+    monkeypatch.setattr(pipeline_module, "plot_popularity_distribution", lambda *_: None)
     monkeypatch.setattr(
-        project_module, "plot_popularity_by_decade_boxplot", lambda *_: None
+        pipeline_module, "plot_popularity_by_decade_boxplot", lambda *_: None
     )
     monkeypatch.setattr(
-        project_module,
+        pipeline_module,
         "plot_feature_trends",
         lambda frame, _: compute_audio_feature_trends_by_year(frame),
     )
     monkeypatch.setattr(
-        project_module,
+        pipeline_module,
         "plot_correlation_heatmap",
         lambda frame, features, _: (
             compute_correlation_matrix(frame, features)
@@ -692,7 +698,7 @@ def test_create_eda_outputs_preserves_absent_auxiliary_dataset_behavior(
         ),
     )
     monkeypatch.setattr(
-        project_module,
+        pipeline_module,
         "plot_interactive_energy_loudness",
         lambda *_: "Synthetic interactive plot note.",
     )
