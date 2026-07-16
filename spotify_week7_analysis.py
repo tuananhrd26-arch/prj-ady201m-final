@@ -56,6 +56,7 @@ from src.config import (
     TREND_FEATURES,
 )
 from src.data_loader import load_project_data, read_csv_if_exists
+from src.preprocessing import clean_tracks_for_analysis
 
 import joblib
 import matplotlib.pyplot as plt
@@ -84,37 +85,6 @@ def make_paths(root: Path, output_dir: str = DEFAULT_OUTPUT_DIRNAME) -> ProjectP
     for path in [paths.output, paths.tables, paths.figures, paths.sql, paths.model_artifacts]:
         path.mkdir(parents=True, exist_ok=True)
     return paths
-
-
-def clean_tracks_for_analysis(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a non-destructive cleaned copy suitable for EDA and modeling."""
-    tracks = df.copy()
-
-    # Standardize a few expected columns.
-    if "release_year" in tracks.columns and "year" not in tracks.columns:
-        tracks["year"] = tracks["release_year"]
-
-    numeric_candidates = sorted(set(REGRESSION_FEATURES + RECOMMENDER_FEATURES + [TARGET]))
-    for col in numeric_candidates:
-        if col in tracks.columns:
-            tracks[col] = pd.to_numeric(tracks[col], errors="coerce")
-
-    # Keep only rows with essential identifiers.
-    required_identity = [col for col in ["id", "name"] if col in tracks.columns]
-    if required_identity:
-        tracks = tracks.dropna(subset=required_identity)
-
-    # Fill small numeric missingness with median to avoid breaking models.
-    numeric_cols = tracks.select_dtypes(include=[np.number]).columns
-    for col in numeric_cols:
-        if tracks[col].isna().any():
-            tracks[col] = tracks[col].fillna(tracks[col].median())
-
-    # Derived column for decade-level analysis.
-    if "year" in tracks.columns:
-        tracks["decade"] = (tracks["year"].astype(int) // 10) * 10
-
-    return tracks.reset_index(drop=True)
 
 
 def save_table(df: pd.DataFrame, path: Path) -> None:
