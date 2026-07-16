@@ -23,6 +23,12 @@ from src.config import (
 )
 from src.data_loader import load_project_data, read_csv_if_exists
 from src.preprocessing import clean_tracks_for_analysis
+from src.validation import (
+    require_columns,
+    require_finite_numeric,
+    require_non_missing,
+    require_unique,
+)
 
 
 REQUIRED_CLEANED_FILES = {
@@ -282,6 +288,134 @@ def cleaned_files_are_read_only(cleaned_data_dir: Path) -> Generator[None, None,
         if path.is_file()
     }
     assert after == before, "The test session changed one or more cleaned-data files"
+
+
+def test_require_columns_passes_without_mutating_dataframe() -> None:
+    frame = pd.DataFrame({"id": ["a"], "name": ["Alpha"], "artists": ["Artist"]})
+    before = frame.copy(deep=True)
+
+    require_columns(frame, ["id", "name", "artists"], context="Track catalog")
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_require_columns_reports_context_and_ordered_missing_names() -> None:
+    frame = pd.DataFrame({"id": ["a"]})
+    before = frame.copy(deep=True)
+
+    with pytest.raises(ValueError) as error:
+        require_columns(
+            frame,
+            ["id", "name", "artists"],
+            context="Recommender catalog",
+        )
+
+    assert str(error.value) == (
+        "Recommender catalog is missing required columns: name, artists"
+    )
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_require_non_missing_preserves_blank_identity_behavior_and_input() -> None:
+    valid = pd.DataFrame({"id": ["", "b"], "name": ["Alpha", ""]})
+    valid_before = valid.copy(deep=True)
+    invalid = pd.DataFrame({"id": ["a", None], "name": ["Alpha", "Beta"]})
+    invalid_before = invalid.copy(deep=True)
+
+    require_non_missing(
+        valid,
+        ["id", "name"],
+        context="Recommender catalog",
+        value_label="identity or feature values",
+    )
+    with pytest.raises(ValueError) as error:
+        require_non_missing(
+            invalid,
+            ["id", "name"],
+            context="Recommender catalog",
+            value_label="identity or feature values",
+        )
+
+    assert str(error.value) == (
+        "Recommender catalog contains missing identity or feature values."
+    )
+    pd.testing.assert_frame_equal(valid, valid_before)
+    pd.testing.assert_frame_equal(invalid, invalid_before)
+
+
+def test_require_finite_numeric_accepts_finite_numbers_and_numeric_strings() -> None:
+    frame = pd.DataFrame(
+        {"energy": [0.0, 0.5, 1.0], "tempo": ["80", "120.5", "160"]}
+    )
+    before = frame.copy(deep=True)
+
+    require_finite_numeric(
+        frame,
+        ["energy", "tempo"],
+        context="Recommender catalog",
+        value_label="feature values",
+    )
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+@pytest.mark.parametrize("invalid_value", [np.nan, np.inf, -np.inf])
+def test_require_finite_numeric_rejects_each_non_finite_value(
+    invalid_value: float,
+) -> None:
+    frame = pd.DataFrame({"energy": [0.25, invalid_value]})
+    before = frame.copy(deep=True)
+
+    with pytest.raises(ValueError) as error:
+        require_finite_numeric(
+            frame,
+            ["energy"],
+            context="Recommender catalog",
+            value_label="feature values",
+        )
+
+    assert str(error.value) == "Recommender catalog contains non-finite feature values."
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_require_finite_numeric_preserves_non_numeric_conversion_error() -> None:
+    frame = pd.DataFrame({"energy": [0.25, "not-numeric"]})
+    before = frame.copy(deep=True)
+
+    with pytest.raises(ValueError, match="could not convert string to float"):
+        require_finite_numeric(
+            frame,
+            ["energy"],
+            context="Recommender catalog",
+            value_label="feature values",
+        )
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_require_unique_passes_and_preserves_duplicate_error_contract() -> None:
+    valid = pd.DataFrame({"id": ["a", "b"]})
+    valid_before = valid.copy(deep=True)
+    invalid = pd.DataFrame({"id": ["a", "a"]})
+    invalid_before = invalid.copy(deep=True)
+
+    require_unique(
+        valid,
+        "id",
+        context="Recommender catalog",
+        value_label="track ids",
+    )
+    with pytest.raises(ValueError) as error:
+        require_unique(
+            invalid,
+            "id",
+            context="Recommender catalog",
+            value_label="track ids",
+        )
+
+    assert str(error.value) == "Recommender catalog track ids are not unique."
+    pd.testing.assert_frame_equal(valid, valid_before)
+    pd.testing.assert_frame_equal(invalid, invalid_before)
 
 
 def test_read_csv_if_exists_loads_existing_file_without_modification(

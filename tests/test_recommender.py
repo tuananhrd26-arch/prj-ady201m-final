@@ -22,6 +22,17 @@ from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
+from src.validation import (
+    feature_order_matches,
+    is_exact_top_n,
+    require_columns,
+    require_contiguous_model_index,
+    require_finite_numeric,
+    require_non_missing,
+    require_row_count,
+    require_unique,
+)
+
 
 FEATURES = [
     "acousticness",
@@ -371,6 +382,136 @@ def _filtered_query(
 
 def test_recommender_constants(project_module: ModuleType) -> None:
     assert project_module.RECOMMENDER_FEATURES == FEATURES
+
+
+def test_validation_helpers_are_publicly_integrated(project_module: ModuleType) -> None:
+    expected_helpers = {
+        "feature_order_matches": feature_order_matches,
+        "is_exact_top_n": is_exact_top_n,
+        "require_columns": require_columns,
+        "require_contiguous_model_index": require_contiguous_model_index,
+        "require_finite_numeric": require_finite_numeric,
+        "require_non_missing": require_non_missing,
+        "require_row_count": require_row_count,
+        "require_unique": require_unique,
+    }
+
+    for name, helper in expected_helpers.items():
+        assert getattr(project_module, name) is helper
+
+
+@pytest.mark.parametrize(
+    ("actual", "matches"),
+    [
+        (FEATURES, True),
+        ([FEATURES[1], FEATURES[0], *FEATURES[2:]], False),
+        (FEATURES[:-1], False),
+        ([*FEATURES, "duration_ms"], False),
+    ],
+)
+def test_feature_order_matches_uses_ordered_equality(
+    actual: list[str],
+    matches: bool,
+) -> None:
+    assert feature_order_matches(actual, FEATURES) is matches
+
+
+@pytest.mark.parametrize("values", [[0, 1, 2], [0.0, 1.0, 2.0]])
+def test_require_contiguous_model_index_accepts_row_aligned_integer_equivalents(
+    values: list[float],
+) -> None:
+    frame = pd.DataFrame({"_model_index": values, "id": ["a", "b", "c"]})
+    before = frame.copy(deep=True)
+
+    require_contiguous_model_index(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [0, 1, 1],
+        [0, 2, 3],
+        [1, 2, 3],
+        [2, 1, 0],
+        [0.0, 1.5, 2.0],
+    ],
+    ids=["duplicate", "gap", "nonzero-start", "reversed", "non-integer-equivalent"],
+)
+def test_require_contiguous_model_index_rejects_non_aligned_indexes(
+    values: list[float],
+) -> None:
+    frame = pd.DataFrame({"_model_index": values})
+    before = frame.copy(deep=True)
+
+    with pytest.raises(ValueError) as error:
+        require_contiguous_model_index(frame)
+
+    assert str(error.value) == (
+        "Recommender catalog model indexes are not contiguous and row-aligned."
+    )
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_require_contiguous_model_index_reports_missing_column() -> None:
+    frame = pd.DataFrame({"id": ["a", "b"]})
+    before = frame.copy(deep=True)
+
+    with pytest.raises(ValueError) as error:
+        require_contiguous_model_index(frame)
+
+    assert str(error.value) == (
+        "Recommender catalog is missing required columns: _model_index"
+    )
+    pd.testing.assert_frame_equal(frame, before)
+
+
+@pytest.mark.parametrize(
+    ("expected_context", "message"),
+    [
+        (
+            "the feature matrix",
+            "Recommender catalog row count does not match the feature matrix.",
+        ),
+        (
+            "the fitted model",
+            "Recommender catalog row count does not match the fitted model.",
+        ),
+    ],
+)
+def test_require_row_count_preserves_matching_and_mismatch_contract(
+    expected_context: str,
+    message: str,
+) -> None:
+    require_row_count(
+        3,
+        3,
+        context="Recommender catalog",
+        expected_context=expected_context,
+    )
+
+    with pytest.raises(ValueError) as error:
+        require_row_count(
+            2,
+            3,
+            context="Recommender catalog",
+            expected_context=expected_context,
+        )
+
+    assert str(error.value) == message
+
+
+@pytest.mark.parametrize(
+    ("returned_count", "requested_count", "expected"),
+    [(10, 10, True), (9, 10, False), (11, 10, False), (0, 0, True), (0, 1, False)],
+)
+def test_is_exact_top_n_uses_exact_count_equality(
+    returned_count: int,
+    requested_count: int,
+    expected: bool,
+) -> None:
+    assert is_exact_top_n(returned_count, requested_count) is expected
 
 
 def test_canonical_recommendation_manifest(
