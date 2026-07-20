@@ -37,6 +37,8 @@ spotify-recommendation-analytics/
 |-- scripts/
 |   `-- recommend_song.py           # Read-only recommender CLI
 |-- tests/                          # Characterization and acceptance suites
+|-- week7_outputs/                  # Canonical tables, figures, and artifacts
+|-- requirements.txt                # Runtime dependencies
 |-- spotify_week7_analysis.py       # Public pipeline CLI and compatibility API
 |-- RUN_INSTRUCTIONS.md
 `-- FINAL_ACCEPTANCE.md
@@ -49,6 +51,23 @@ and returns an acceptance-friendly result dictionary.
 
 `spotify_week7_analysis.py` remains the public command and backward-compatible
 import entry point. Analysis implementations remain in their focused modules.
+
+## Fresh-clone setup
+
+Create a local virtual environment and install the runtime and test
+dependencies:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install pytest
+```
+
+`pytest` is installed separately because it is a development/test dependency,
+not a runtime requirement. The canonical model artifacts are versioned under
+`week7_outputs/model_artifacts/`, so no training run is required before using
+the read-only consumer or running the accepted tests.
 
 ## Run the accepted pipeline
 

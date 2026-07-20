@@ -6,14 +6,30 @@ These commands target Windows PowerShell and the authoritative repository:
 D:\spotify-recommendation-analytics-cũ
 ```
 
-## 1. Open and activate the environment
+## 1. Fresh-clone setup and environment activation
+
+For a fresh clone, create a local environment and install runtime and test
+dependencies:
+
+```powershell
+cd "<REPOSITORY_CLONE_PATH>"
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install pytest
+```
+
+`pytest` is installed separately because it is required by the accepted test
+suite but is not a runtime dependency. The accepted local workspace can be
+activated directly with:
 
 ```powershell
 cd "D:\spotify-recommendation-analytics-cũ"
 D:\spotify-recommendation-analytics-cũ\.venv\Scripts\Activate.ps1
 ```
 
-All commands below use the activated environment's `python` command.
+If `.venv` already exists, skip the environment-creation command. All commands
+below use the activated environment's `python` command.
 
 ## 2. Run the accepted non-SQL pipeline
 
@@ -72,7 +88,9 @@ Name-and-artists lookup can be ambiguous when duplicate catalog identity pairs
 exist. Use track ID or model index when possible.
 
 The consumer loads and validates existing artifacts; it never refits the
-scaler or nearest-neighbor model.
+scaler or nearest-neighbor model. All five canonical model artifacts are
+versioned under `week7_outputs/model_artifacts/`, so a fresh clone can query the
+consumer without first running the training pipeline.
 
 ## 5. Write recommendation results to CSV
 

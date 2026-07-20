@@ -5,6 +5,11 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 .ipynb_checkpoints/
 
 # Virtual environments
@@ -18,28 +23,48 @@ pyvenv.cfg
 .vscode/
 .idea/
 .audit_outputs/
+*.swp
+*.swo
+*.tmp
+*.bak
+*~
 
 # Raw data and old outputs
 data/
 eda_outputs/
+demo_outputs/
+*_outputs_demo/
+.test_outputs/
 report_figures/
 model_artifacts_v2/
 prepared_model_dataset.csv
 test.py
 
-# Generated model artifacts
+# Local databases, logs, and plotting caches
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.matplotlib/
+.mplconfig/
+
+# Generated model artifacts; retain the canonical accepted snapshot
 *.joblib
 !week7_outputs/model_artifacts/
 week7_outputs/model_artifacts/*
+!week7_outputs/model_artifacts/best_popularity_model.joblib
+!week7_outputs/model_artifacts/nearest_neighbors_recommender.joblib
+!week7_outputs/model_artifacts/recommender_features.json
+!week7_outputs/model_artifacts/recommender_scaler.joblib
 !week7_outputs/model_artifacts/recommender_catalog.csv
 
-# Preserved local report deliverables and source backups
+# Generated report deliverables and source backups
 report_package/
 report_package_updated/
 report_tables/
-spotify_report_package.zip
-spotify_report_package_updated.zip
-spotify_week7_analysis_before_report_fix.py
+spotify_report_package*.zip
+spotify_week7_analysis_before_report_*.py
+pasted-text.txt
 
 # Optional SQL reference outputs
 week7_outputs/sql/
@@ -47,3 +72,4 @@ week7_outputs/sql/
 # OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
