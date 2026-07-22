@@ -1,84 +1,36 @@
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-.coverage.*
-htmlcov/
-.ipynb_checkpoints/
-
-# Virtual environments
+# Virtual environments and Python caches
 .venv/
 venv/
 env/
-pyvenv.cfg
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
 
-# Local editor / agent files
-.agents/
-.vscode/
-.idea/
-.audit_outputs/
-.cache/
-*.swp
-*.swo
-*.tmp
-*.bak
-*~
-
-# Local configuration and credentials
-.env
-.env.*
-!.env.example
-.streamlit/secrets.toml
-
-# Raw data and old outputs
-data/
-eda_outputs/
+# Generated analysis outputs
+generated_outputs/
 demo_outputs/
-pipeline_outputs/
-smoke_outputs/
-*_outputs_demo/
-.test_outputs/
-report_figures/
-model_artifacts_v2/
-prepared_model_dataset.csv
-test.py
 
-# Local databases, logs, and plotting caches
+# Local databases and logs
 *.db
 *.sqlite
 *.sqlite3
 *.log
-.matplotlib/
-.mplconfig/
 
-# Generated model artifacts; retain the canonical accepted snapshot
-*.joblib
-!week7_outputs/model_artifacts/
-week7_outputs/model_artifacts/*
-!week7_outputs/model_artifacts/best_popularity_model.joblib
-!week7_outputs/model_artifacts/nearest_neighbors_recommender.joblib
-!week7_outputs/model_artifacts/recommender_features.json
-!week7_outputs/model_artifacts/recommender_scaler.joblib
-!week7_outputs/model_artifacts/recommender_catalog.csv
+# Local configuration and secrets
+.env
+.env.*
+.streamlit/secrets.toml
 
-# Generated report deliverables and source backups
-report_package/
-report_package_updated/
-report_tables/
-spotify_report_package*.zip
-spotify_week7_analysis_before_report_*.py
-pasted-text.txt
+# Editors and local agent files
+.vscode/
+.idea/
+.agents/
+*.swp
+*.swo
+*~
 
-# Optional SQL reference outputs
-week7_outputs/sql/
-
-# OS files
+# Operating-system files
 .DS_Store
 Thumbs.db
 Desktop.ini

@@ -1,433 +1,466 @@
-"""Focused Streamlit demo for the persisted content-based recommender."""
+"""Self-contained Streamlit application for the persisted Spotify recommender.
+
+The application only loads accepted artifacts from ``models/``.  It never fits,
+trains, or writes a model.
+"""
 
 from __future__ import annotations
 
+import ast
 import html
+import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import joblib
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.recommender_consumer import (
-    RecommenderArtifacts,
-    load_recommender_artifacts,
-    resolve_catalog_track,
-)
-from src.streamlit_support import (
-    fast_recommend,
-    format_artists,
-    normalize_profiles,
-    recommendation_display_frame,
-    search_catalog,
-    track_label,
-)
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+MODEL_DIR = PROJECT_ROOT / "models"
 
-ROOT = Path(__file__).resolve().parent
-ARTIFACT_DIR = ROOT / "week7_outputs" / "model_artifacts"
+BEST_MODEL_FILE = "best_popularity_model.joblib"
+NEIGHBORS_FILE = "nearest_neighbors_recommender.joblib"
+CATALOG_FILE = "recommender_catalog.csv"
+FEATURES_FILE = "recommender_features.json"
+SCALER_FILE = "recommender_scaler.joblib"
+
+RECOMMENDER_FEATURES = (
+    "acousticness",
+    "danceability",
+    "energy",
+    "instrumentalness",
+    "liveness",
+    "loudness",
+    "speechiness",
+    "tempo",
+    "valence",
+)
+CATALOG_COLUMNS = [
+    "_model_index",
+    "id",
+    "name",
+    "artists",
+    "year",
+    "popularity",
+    *RECOMMENDER_FEATURES,
+]
+EXPECTED_CATALOG_ROWS = 170_653
 
 ACCENT = "#2BD576"
 ACCENT_BLUE = "#58A6FF"
 GRID = "rgba(139, 148, 158, 0.16)"
-PANEL = "#11161F"
 
 
-st.set_page_config(
-    page_title="SoundScope · Track Recommender",
-    page_icon="♫",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+@dataclass(frozen=True)
+class RecommenderArtifacts:
+    """Validated accepted artifacts used by the live application."""
+
+    best_popularity_model: Any
+    scaler: Any
+    neighbors: Any
+    features: tuple[str, ...]
+    catalog: pd.DataFrame
 
 
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background:
-            radial-gradient(circle at 82% 3%, rgba(43, 213, 118, 0.12), transparent 25rem),
-            radial-gradient(circle at 8% 55%, rgba(88, 166, 255, 0.08), transparent 28rem),
-            #080B10;
-    }
-    .block-container {
-        max-width: 1240px;
-        padding-top: 2.2rem;
-        padding-bottom: 4rem;
-    }
-    h1, h2, h3 { letter-spacing: -0.035em; }
-    .hero {
-        position: relative;
-        overflow: hidden;
-        padding: 2.35rem 2.45rem;
-        margin-bottom: 1.5rem;
-        border: 1px solid rgba(139, 148, 158, 0.18);
-        border-radius: 26px;
-        background: linear-gradient(125deg, rgba(17, 22, 31, 0.98), rgba(11, 43, 32, 0.92));
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
-    }
-    .hero::after {
-        content: "♫";
-        position: absolute;
-        right: 2.2rem;
-        top: -1.1rem;
-        color: rgba(43, 213, 118, 0.11);
-        font-size: 12rem;
-        font-weight: 900;
-        transform: rotate(-8deg);
-    }
-    .eyebrow {
-        color: #2BD576;
-        font-size: 0.78rem;
-        font-weight: 850;
-        letter-spacing: 0.17em;
-        margin-bottom: 0.65rem;
-    }
-    .hero h1 {
-        position: relative;
-        z-index: 1;
-        margin: 0;
-        max-width: 760px;
-        color: #F5F7FA;
-        font-size: clamp(2.8rem, 7vw, 5.6rem);
-        line-height: 0.95;
-    }
-    .hero p {
-        position: relative;
-        z-index: 1;
-        max-width: 760px;
-        margin: 1.05rem 0 0;
-        color: #AAB4C0;
-        font-size: 1.05rem;
-        line-height: 1.55;
-    }
-    .method-strip {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.55rem;
-        margin-top: 1.2rem;
-    }
-    .method-chip {
-        padding: 0.42rem 0.75rem;
-        color: #C9D1D9;
-        background: rgba(255,255,255,0.055);
-        border: 1px solid rgba(139,148,158,0.18);
-        border-radius: 999px;
-        font-size: 0.84rem;
-    }
-    .search-panel {
-        padding: 1.25rem 1.35rem 0.25rem;
-        border: 1px solid rgba(139, 148, 158, 0.17);
-        border-radius: 20px;
-        background: rgba(17, 22, 31, 0.88);
-        margin-bottom: 1.4rem;
-    }
-    div[data-testid="stMetric"] {
-        height: 100%;
-        padding: 1rem 1.05rem;
-        background: rgba(17, 22, 31, 0.90);
-        border: 1px solid rgba(139, 148, 158, 0.16);
-        border-radius: 16px;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #F5F7FA;
-        font-size: 1.35rem;
-    }
-    .stButton > button {
-        min-height: 3.15rem;
-        border: 0;
-        border-radius: 999px;
-        background: #2BD576;
-        color: #06110B;
-        font-size: 1rem;
-        font-weight: 850;
-        box-shadow: 0 12px 32px rgba(43, 213, 118, 0.18);
-    }
-    .stButton > button:hover {
-        border: 0;
-        color: #06110B;
-        background: #55E792;
-    }
-    .section-kicker {
-        margin-top: 0.4rem;
-        margin-bottom: -0.3rem;
-        color: #2BD576;
-        font-size: 0.76rem;
-        font-weight: 850;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-    }
-    .rec-card {
-        min-height: 174px;
-        padding: 1.15rem 1.2rem;
-        margin-bottom: 0.85rem;
-        background: linear-gradient(145deg, rgba(17, 22, 31, 0.98), rgba(18, 31, 29, 0.94));
-        border: 1px solid rgba(139, 148, 158, 0.17);
-        border-radius: 18px;
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.14);
-    }
-    .rec-topline {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 0.65rem;
-    }
-    .rec-rank {
-        color: #2BD576;
-        font-size: 0.78rem;
-        font-weight: 850;
-        letter-spacing: 0.12em;
-    }
-    .rec-score {
-        color: #F5F7FA;
-        font-size: 0.9rem;
-        font-weight: 800;
-    }
-    .rec-title {
-        overflow: hidden;
-        color: #F5F7FA;
-        font-size: 1.25rem;
-        font-weight: 850;
-        line-height: 1.2;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .rec-artist {
-        overflow: hidden;
-        margin-top: 0.32rem;
-        color: #AAB4C0;
-        font-size: 0.94rem;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .rec-meta {
-        margin-top: 0.65rem;
-        color: #7F8B99;
-        font-size: 0.82rem;
-    }
-    .score-track {
-        height: 5px;
-        margin-top: 0.82rem;
-        overflow: hidden;
-        background: rgba(255,255,255,0.08);
-        border-radius: 99px;
-    }
-    .score-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #2BD576, #58A6FF);
-        border-radius: 99px;
-    }
-    [data-testid="stDataFrame"] {
-        border: 1px solid rgba(139, 148, 158, 0.16);
-        border-radius: 16px;
-        overflow: hidden;
-    }
-    .small-note { color: #8B949E; font-size: 0.87rem; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def load_recommender_artifacts(
+    model_dir: Path = MODEL_DIR,
+    *,
+    validate_alignment: bool = False,
+) -> RecommenderArtifacts:
+    """Load all five accepted artifacts and validate their shared contract."""
+    model_dir = Path(model_dir)
+    filenames = (
+        BEST_MODEL_FILE,
+        NEIGHBORS_FILE,
+        CATALOG_FILE,
+        FEATURES_FILE,
+        SCALER_FILE,
+    )
+    missing = [name for name in filenames if not (model_dir / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing model artifact(s): " + ", ".join(missing)
+        )
 
+    best_model = joblib.load(model_dir / BEST_MODEL_FILE)
+    neighbors = joblib.load(model_dir / NEIGHBORS_FILE)
+    scaler = joblib.load(model_dir / SCALER_FILE)
+    with (model_dir / FEATURES_FILE).open(encoding="utf-8") as handle:
+        feature_data = json.load(handle)
+    catalog = pd.read_csv(model_dir / CATALOG_FILE)
 
-@st.cache_resource(show_spinner="Loading the recommendation model…")
-def load_artifacts() -> RecommenderArtifacts:
-    # Full catalog alignment was validated by the training pipeline. Skipping a
-    # second whole-matrix comparison keeps the live demonstration responsive.
-    return load_recommender_artifacts(
-        ARTIFACT_DIR,
-        validate_alignment=False,
+    if not isinstance(feature_data, list):
+        raise ValueError("The recommender feature file must contain a JSON list.")
+    features = tuple(feature_data)
+    if features != RECOMMENDER_FEATURES:
+        raise ValueError("The recommender feature order is not the accepted order.")
+    if catalog.columns.tolist() != CATALOG_COLUMNS:
+        raise ValueError("The recommender catalog columns are not in the accepted order.")
+    if len(catalog) != EXPECTED_CATALOG_ROWS:
+        raise ValueError(
+            f"The recommender catalog has {len(catalog):,} rows; "
+            f"expected {EXPECTED_CATALOG_ROWS:,}."
+        )
+    if not np.array_equal(
+        catalog["_model_index"].to_numpy(), np.arange(len(catalog))
+    ):
+        raise ValueError("Catalog model indexes are not contiguous and row-aligned.")
+    if not catalog["id"].is_unique:
+        raise ValueError("Catalog track IDs are not unique.")
+    if catalog[["id", "name", "artists", *features]].isna().any().any():
+        raise ValueError("Catalog identity or audio-feature values are missing.")
+    if not np.isfinite(catalog[list(features)].to_numpy(dtype=float)).all():
+        raise ValueError("Catalog audio-feature values must be finite.")
+
+    feature_count = len(features)
+    if int(getattr(scaler, "n_features_in_", -1)) != feature_count:
+        raise ValueError("The persisted scaler was not fitted with nine features.")
+    if int(getattr(neighbors, "n_features_in_", -1)) != feature_count:
+        raise ValueError("The neighbor model was not fitted with nine features.")
+    if int(getattr(neighbors, "n_samples_fit_", -1)) != len(catalog):
+        raise ValueError("The neighbor model row count does not match the catalog.")
+
+    fitted_matrix = getattr(neighbors, "_fit_X", None)
+    expected_shape = (len(catalog), feature_count)
+    if fitted_matrix is None or tuple(fitted_matrix.shape) != expected_shape:
+        raise ValueError("The fitted neighbor matrix does not match the catalog.")
+    if validate_alignment:
+        transformed = scaler.transform(catalog[list(features)])
+        if not np.allclose(transformed, fitted_matrix, rtol=0, atol=1e-12):
+            raise ValueError("Catalog rows do not align with the fitted model matrix.")
+
+    return RecommenderArtifacts(
+        best_popularity_model=best_model,
+        scaler=scaler,
+        neighbors=neighbors,
+        features=features,
+        catalog=catalog,
     )
 
 
-def style_radar(fig: go.Figure) -> go.Figure:
-    fig.update_layout(
-        height=570,
-        margin=dict(l=30, r=30, t=70, b=35),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#D7DEE7", family="Inter, Arial, sans-serif"),
-        title_font=dict(size=21, color="#F5F7FA"),
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.12),
-        hoverlabel=dict(bgcolor=PANEL, font_color="#F5F7FA"),
+@st.cache_resource(show_spinner="Loading the accepted recommendation model…")
+def load_cached_artifacts() -> RecommenderArtifacts:
+    """Cache artifact loading for interactive Streamlit reruns."""
+    return load_recommender_artifacts(validate_alignment=False)
+
+
+def resolve_catalog_track(
+    catalog: pd.DataFrame,
+    *,
+    track_id: str | None = None,
+    model_index: int | None = None,
+) -> pd.Series:
+    """Resolve exactly one catalog row by Spotify ID or fitted-row index."""
+    if (track_id is None) == (model_index is None):
+        raise ValueError("Provide exactly one of track_id or model_index.")
+    if track_id is not None:
+        matches = catalog.loc[catalog["id"] == str(track_id)]
+        description = f"track ID {track_id!r}"
+    else:
+        if isinstance(model_index, bool) or not isinstance(model_index, (int, np.integer)):
+            raise ValueError("model_index must be a non-negative integer.")
+        if int(model_index) < 0:
+            raise ValueError("model_index must be a non-negative integer.")
+        matches = catalog.loc[catalog["_model_index"] == int(model_index)]
+        description = f"model index {int(model_index)}"
+    if matches.empty:
+        raise LookupError(f"No catalog track matches {description}.")
+    if len(matches) != 1:
+        raise LookupError(f"The catalog selector is ambiguous for {description}.")
+    return matches.iloc[0].copy()
+
+
+def recommend_tracks(
+    artifacts: RecommenderArtifacts,
+    *,
+    model_index: int,
+    top_n: int,
+) -> pd.DataFrame:
+    """Return an exact Top N without fitting or changing persisted artifacts."""
+    if isinstance(top_n, bool) or not isinstance(top_n, (int, np.integer)):
+        raise ValueError("top_n must be a positive integer.")
+    if int(top_n) <= 0:
+        raise ValueError("top_n must be a positive integer.")
+
+    query = resolve_catalog_track(artifacts.catalog, model_index=model_index)
+    query_index = int(query["_model_index"])
+    query_frame = artifacts.catalog.iloc[[query_index]][list(artifacts.features)]
+    transformed = artifacts.scaler.transform(query_frame)
+
+    fitted_query = artifacts.neighbors._fit_X[query_index].reshape(1, -1)
+    if not np.allclose(transformed, fitted_query, rtol=0, atol=1e-12):
+        raise ValueError("The selected catalog row is not aligned with the model.")
+
+    total = int(artifacts.neighbors.n_samples_fit_)
+    pool = min(total, max(50, int(top_n) * 8))
+    query_id = str(query["id"])
+    query_pair = (str(query["name"]), str(query["artists"]))
+
+    while True:
+        distances, indexes = artifacts.neighbors.kneighbors(
+            transformed,
+            n_neighbors=pool,
+        )
+        seen_pairs: set[tuple[str, str]] = set()
+        rows: list[dict[str, Any]] = []
+        for distance, index_value in zip(distances[0], indexes[0]):
+            index = int(index_value)
+            neighbor = artifacts.catalog.iloc[index]
+            pair = (str(neighbor["name"]), str(neighbor["artists"]))
+            if (
+                index == query_index
+                or str(neighbor["id"]) == query_id
+                or pair == query_pair
+                or pair in seen_pairs
+            ):
+                continue
+            similarity = 1.0 - float(distance)
+            if not np.isfinite(similarity):
+                raise ValueError("The model returned a non-finite similarity value.")
+            seen_pairs.add(pair)
+            rows.append(
+                {
+                    "rank": len(rows) + 1,
+                    "recommended_model_index": index,
+                    "recommended_id": str(neighbor["id"]),
+                    "recommended_name": neighbor["name"],
+                    "recommended_artists": neighbor["artists"],
+                    "year": neighbor["year"],
+                    "popularity": neighbor["popularity"],
+                    "cosine_distance": float(distance),
+                    "similarity": similarity,
+                }
+            )
+            if len(rows) == int(top_n):
+                return pd.DataFrame(rows)
+        if pool >= total:
+            raise RuntimeError(f"Only {len(rows)} unique recommendations were available.")
+        pool = min(total, pool * 2)
+
+
+def format_artists(value: Any) -> str:
+    """Turn the catalog's serialized artist list into readable text."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return "Unknown artist"
+    text = str(value).strip()
+    try:
+        parsed = ast.literal_eval(text)
+    except (SyntaxError, ValueError):
+        return text
+    if isinstance(parsed, (list, tuple)):
+        names = [str(item).strip() for item in parsed if str(item).strip()]
+        return ", ".join(names) if names else "Unknown artist"
+    return str(parsed)
+
+
+def search_catalog(catalog: pd.DataFrame, query: str, limit: int = 80) -> pd.DataFrame:
+    """Find popular catalog matches by track or artist text."""
+    if limit <= 0:
+        raise ValueError("limit must be positive.")
+    normalized = query.strip().casefold()
+    matches = catalog
+    if normalized:
+        name_match = catalog["name"].astype(str).str.casefold().str.contains(
+            normalized, regex=False
+        )
+        artist_match = catalog["artists"].astype(str).str.casefold().str.contains(
+            normalized, regex=False
+        )
+        matches = catalog.loc[name_match | artist_match]
+    return (
+        matches.sort_values(
+            ["popularity", "year", "name"],
+            ascending=[False, False, True],
+        )
+        .head(limit)
+        .reset_index(drop=True)
     )
-    return fig
+
+
+def track_label(row: pd.Series) -> str:
+    """Create a stable select-box label."""
+    year = "—" if pd.isna(row["year"]) else str(int(row["year"]))
+    return f"{row['name']} — {format_artists(row['artists'])} ({year})"
+
+
+def recommendation_display_frame(recommendations: pd.DataFrame) -> pd.DataFrame:
+    """Format recommendation rows for the exact-results table."""
+    result = recommendations[
+        [
+            "rank",
+            "recommended_name",
+            "recommended_artists",
+            "year",
+            "popularity",
+            "similarity",
+        ]
+    ].copy()
+    result["recommended_artists"] = result["recommended_artists"].map(format_artists)
+    result["year"] = result["year"].round().astype("Int64")
+    result["popularity"] = result["popularity"].round().astype("Int64")
+    result["similarity"] = (result["similarity"] * 100).round(2)
+    return result.rename(
+        columns={
+            "rank": "Rank",
+            "recommended_name": "Track",
+            "recommended_artists": "Artist",
+            "year": "Year",
+            "popularity": "Popularity",
+            "similarity": "Similarity (%)",
+        }
+    )
+
+
+def normalized_audio_profiles(
+    rows: pd.DataFrame,
+    catalog: pd.DataFrame,
+    features: tuple[str, ...],
+) -> pd.DataFrame:
+    """Scale profiles robustly for display; this is not model preprocessing."""
+    lower = catalog[list(features)].quantile(0.05)
+    upper = catalog[list(features)].quantile(0.95)
+    span = (upper - lower).replace(0, 1)
+    return ((rows[list(features)] - lower) / span).clip(0, 1)
 
 
 def recommendation_card(row: pd.Series) -> None:
+    """Render one recommendation card."""
     similarity = float(row["similarity"]) * 100
-    popularity = int(round(float(row["popularity"])))
-    year = int(round(float(row["year"])))
-    track = html.escape(str(row["recommended_name"]))
-    artist = html.escape(format_artists(row["recommended_artists"]))
-    rank = int(row["rank"])
-    width = max(0.0, min(100.0, similarity))
     st.markdown(
         f"""
         <div class="rec-card">
-            <div class="rec-topline">
-                <div class="rec-rank">RECOMMENDATION {rank:02d}</div>
-                <div class="rec-score">{similarity:.2f}% similar</div>
-            </div>
-            <div class="rec-title">{track}</div>
-            <div class="rec-artist">{artist}</div>
-            <div class="rec-meta">{year} · Popularity {popularity}/100</div>
-            <div class="score-track"><div class="score-fill" style="width:{width:.2f}%"></div></div>
+          <div class="rec-rank">RECOMMENDATION {int(row['rank']):02d}</div>
+          <div class="rec-title">{html.escape(str(row['recommended_name']))}</div>
+          <div class="rec-artist">{html.escape(format_artists(row['recommended_artists']))}</div>
+          <div class="rec-meta">{int(row['year'])} · Popularity {int(round(float(row['popularity'])))}/100 · {similarity:.2f}% similar</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-st.markdown(
-    """
-    <div class="hero">
-        <div class="eyebrow">GROUP 3 · LIVE MODEL DEMO</div>
-        <h1>Track Recommender</h1>
-        <p>
-            Search one exact catalog track and retrieve its closest audio-feature
-            neighbors from the persisted recommendation model.
-        </p>
-        <div class="method-strip">
-            <span class="method-chip">9 audio features</span>
-            <span class="method-chip">StandardScaler</span>
-            <span class="method-chip">Cosine distance</span>
-            <span class="method-chip">Top 5–15 unique tracks</span>
+def main() -> None:
+    """Run the Streamlit interface."""
+    st.set_page_config(
+        page_title="SoundScope · Track Recommender",
+        page_icon="♫",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    st.markdown(
+        """
+        <style>
+        .stApp { background: #080B10; }
+        .block-container { max-width: 1200px; padding-top: 2rem; }
+        .hero { padding: 2rem; border: 1px solid #26303d; border-radius: 24px;
+                background: linear-gradient(125deg, #11161f, #0b2b20); margin-bottom: 1.4rem; }
+        .hero h1 { color: #f5f7fa; font-size: 3.5rem; margin: 0; }
+        .hero p, .rec-artist, .rec-meta { color: #aab4c0; }
+        .eyebrow, .rec-rank { color: #2bd576; font-weight: 800; letter-spacing: .12em; }
+        .rec-card { min-height: 145px; padding: 1rem 1.15rem; margin-bottom: .8rem;
+                    background: #11161f; border: 1px solid #26303d; border-radius: 18px; }
+        .rec-title { color: #f5f7fa; font-size: 1.2rem; font-weight: 800; margin-top: .55rem; }
+        .rec-meta { margin-top: .65rem; font-size: .85rem; }
+        </style>
+        <div class="hero">
+          <div class="eyebrow">GROUP 3 · PERSISTED MODEL DEMO</div>
+          <h1>Track Recommender</h1>
+          <p>Search for a catalog track and retrieve its closest standardized audio-profile neighbors.</p>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
 
+    try:
+        artifacts = load_cached_artifacts()
+    except (FileNotFoundError, ValueError, OSError) as error:
+        st.error(f"The accepted model artifacts could not be loaded: {error}")
+        st.stop()
 
-try:
-    artifacts = load_artifacts()
-except (FileNotFoundError, ValueError, OSError) as error:
-    st.error(f"The recommender artifacts could not be loaded: {error}")
-    st.stop()
-
-catalog = artifacts.catalog
-
-st.markdown("<div class='section-kicker'>Choose the seed track</div>", unsafe_allow_html=True)
-st.subheader("What should the model recommend from?")
-
-with st.container(border=False):
-    search_col, top_col = st.columns([3, 1])
-    search_text = search_col.text_input(
+    catalog = artifacts.catalog
+    search_column, count_column = st.columns([3, 1])
+    query = search_column.text_input(
         "Search by track or artist",
         placeholder="Example: Dynamite or BTS",
     )
-    top_n = top_col.slider(
-        "Recommendations",
-        min_value=5,
-        max_value=15,
-        value=10,
-    )
-
-    matches = search_catalog(catalog, search_text, limit=80)
+    top_n = count_column.slider("Recommendations", min_value=3, max_value=15, value=10)
+    matches = search_catalog(catalog, query)
     if matches.empty:
         st.warning("No matching track was found. Try a shorter search phrase.")
         st.stop()
 
-    options = matches["_model_index"].astype(int).tolist()
     row_by_index = {
-        int(row["_model_index"]): row
-        for _, row in matches.iterrows()
+        int(row["_model_index"]): row for _, row in matches.iterrows()
     }
     selected_index = st.selectbox(
         "Select the exact track, artist, and year",
-        options,
+        list(row_by_index),
         format_func=lambda index: track_label(row_by_index[index]),
     )
+    selected = resolve_catalog_track(catalog, model_index=int(selected_index))
 
-selected = resolve_catalog_track(catalog, model_index=int(selected_index))
+    summary = st.columns([1.5, 1.5, 0.7, 0.7])
+    summary[0].metric("Track", str(selected["name"]))
+    summary[1].metric("Artist", format_artists(selected["artists"]))
+    summary[2].metric("Year", int(selected["year"]))
+    summary[3].metric("Popularity", int(round(float(selected["popularity"]))))
 
-st.markdown("<div class='section-kicker'>Selected catalog item</div>", unsafe_allow_html=True)
-metrics = st.columns([1.4, 1.4, 0.7, 0.7])
-metrics[0].metric("Track", str(selected["name"]))
-metrics[1].metric("Artist", format_artists(selected["artists"]))
-metrics[2].metric("Year", int(selected["year"]))
-metrics[3].metric("Popularity", int(round(float(selected["popularity"]))))
+    if st.button("Generate recommendations", type="primary", use_container_width=True):
+        try:
+            with st.spinner("Comparing standardized audio profiles…"):
+                st.session_state["recommendations"] = recommend_tracks(
+                    artifacts,
+                    model_index=int(selected_index),
+                    top_n=int(top_n),
+                )
+                st.session_state["recommendation_query"] = (int(selected_index), int(top_n))
+        except (ValueError, LookupError, RuntimeError) as error:
+            st.error(f"Recommendations could not be generated: {error}")
 
-if st.button(
-    "Generate recommendations",
-    type="primary",
-    use_container_width=True,
-):
-    with st.spinner("Comparing standardized audio profiles…"):
-        st.session_state["recommendations"] = fast_recommend(
-            artifacts,
-            model_index=int(selected_index),
-            top_n=int(top_n),
-        )
-        st.session_state["query_index"] = int(selected_index)
-        st.session_state["query_top_n"] = int(top_n)
-
-recommendations = st.session_state.get("recommendations")
-same_query = st.session_state.get("query_index") == int(selected_index)
-same_top_n = st.session_state.get("query_top_n") == int(top_n)
-
-if recommendations is None or not same_query or not same_top_n:
-    st.markdown(
-        """
-        <p class="small-note">
-            Select a track and run the model. The app loads the persisted scaler,
-            feature contract, catalog, and nearest-neighbor model without retraining.
-        </p>
-        """,
-        unsafe_allow_html=True,
+    recommendations = st.session_state.get("recommendations")
+    same_query = st.session_state.get("recommendation_query") == (
+        int(selected_index),
+        int(top_n),
     )
-else:
+    if recommendations is None or not same_query:
+        st.info("Choose a track and generate recommendations. No model training occurs in this app.")
+        return
+
     st.divider()
-    st.markdown("<div class='section-kicker'>Model output</div>", unsafe_allow_html=True)
     st.subheader(f"Top {len(recommendations)} audio neighbors")
-    st.caption(
-        "Similarity is calculated as 1 − cosine distance. Popularity is displayed for context and is not used by the recommender."
-    )
-
-    card_columns = st.columns(2)
-    for position, (_, recommendation) in enumerate(recommendations.iterrows()):
-        with card_columns[position % 2]:
-            recommendation_card(recommendation)
+    st.caption("Similarity equals 1 − cosine distance; popularity is display context only.")
+    columns = st.columns(2)
+    for position, (_, row) in enumerate(recommendations.iterrows()):
+        with columns[position % 2]:
+            recommendation_card(row)
 
     with st.expander("View exact result table"):
         st.dataframe(
             recommendation_display_frame(recommendations),
             hide_index=True,
             use_container_width=True,
-            column_config={
-                "Similarity (%)": st.column_config.ProgressColumn(
-                    "Similarity (%)",
-                    min_value=0,
-                    max_value=100,
-                    format="%.2f%%",
-                ),
-                "Popularity": st.column_config.ProgressColumn(
-                    "Popularity",
-                    min_value=0,
-                    max_value=100,
-                    format="%d",
-                ),
-            },
         )
 
-    indices = [int(selected_index)] + recommendations[
+    indexes = [int(selected_index)] + recommendations[
         "recommended_model_index"
     ].astype(int).tolist()
-    profile_rows = catalog.iloc[indices].copy()
-    normalized = normalize_profiles(
-        profile_rows,
+    profiles = normalized_audio_profiles(
+        catalog.iloc[indexes],
         catalog,
-        list(artifacts.features),
+        artifacts.features,
     )
-    query_profile = normalized.iloc[0]
-    recommendation_mean = normalized.iloc[1:].mean()
+    seed_profile = profiles.iloc[0]
+    recommendation_average = profiles.iloc[1:].mean()
     labels = [feature.replace("_", " ").title() for feature in artifacts.features]
-
     radar = go.Figure()
     radar.add_trace(
         go.Scatterpolar(
-            r=query_profile.tolist() + [query_profile.iloc[0]],
+            r=seed_profile.tolist() + [seed_profile.iloc[0]],
             theta=labels + [labels[0]],
             fill="toself",
             name="Selected track",
@@ -436,43 +469,30 @@ else:
     )
     radar.add_trace(
         go.Scatterpolar(
-            r=recommendation_mean.tolist() + [recommendation_mean.iloc[0]],
+            r=recommendation_average.tolist() + [recommendation_average.iloc[0]],
             theta=labels + [labels[0]],
             fill="toself",
             name="Recommendation average",
-            opacity=0.68,
             line=dict(color=ACCENT_BLUE, width=2.5),
         )
     )
     radar.update_layout(
         title="Audio Profile Comparison",
+        height=560,
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#D7DEE7"),
         polar=dict(
             bgcolor="rgba(0,0,0,0)",
-            radialaxis=dict(
-                visible=True,
-                range=[0, 1],
-                tickfont=dict(color="#7F8B99"),
-                gridcolor=GRID,
-            ),
+            radialaxis=dict(visible=True, range=[0, 1], gridcolor=GRID),
             angularaxis=dict(gridcolor=GRID),
         ),
     )
-    st.plotly_chart(style_radar(radar), use_container_width=True)
+    st.plotly_chart(radar, use_container_width=True)
     st.caption(
-        "Radar values use robust 5th-to-95th-percentile scaling for display only. The recommendation model uses StandardScaler and cosine distance."
+        "The radar chart uses percentile scaling for display only. "
+        "The persisted recommender uses StandardScaler and cosine distance."
     )
 
-with st.expander("How the recommender works"):
-    st.markdown(
-        """
-        1. Each track is represented by nine audio features: acousticness,
-           danceability, energy, instrumentalness, liveness, loudness,
-           speechiness, tempo, and valence.
-        2. The persisted StandardScaler transforms the selected track.
-        3. NearestNeighbors compares the standardized vector using cosine distance.
-        4. The seed track and repeated name–artist pairs are excluded.
-        5. The application returns the requested number of unique tracks.
 
-        **Important:** internal correctness checks do not prove listener satisfaction.
-        """
-    )
+if __name__ == "__main__":
+    main()

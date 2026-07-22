@@ -1,172 +1,164 @@
 # Spotify Recommendation Analytics
 
-Spotify Recommendation Analytics is a reproducible Python 3.12 project for
-exploring cleaned Spotify data, comparing popularity-regression models, and
-serving a persisted content-based track recommender through Streamlit.
+This student data-analysis project explores cleaned Spotify track data,
+compares popularity-regression models, and serves a persisted content-based
+track recommender through Streamlit. The repository deliberately keeps one
+analysis notebook and one application entry point so the complete workflow is
+easy to inspect and demonstrate.
 
-The public repository is intentionally small: it contains the accepted cleaned
-inputs, the Python pipeline, the focused Streamlit application, and the five
-persisted model artifacts. Development tests, audit reports, duplicate run
-instructions, and reproducible report outputs are not part of the release.
-
-## Repository tree
+## Project structure
 
 ```text
 .
 |-- .streamlit/
 |   `-- config.toml
-|-- cleaned_data/
+|-- data/
 |   |-- data_clean.csv
 |   |-- data_by_artist_clean.csv
 |   |-- data_by_genres_clean.csv
 |   |-- data_by_year_clean.csv
 |   `-- data_w_genres_clean.csv
-|-- src/
-|   |-- config.py
-|   |-- data_loader.py
-|   |-- eda.py
-|   |-- pipeline.py
-|   |-- preprocessing.py
-|   |-- recommender.py
-|   |-- recommender_consumer.py
-|   |-- regression.py
-|   |-- sql_analysis.py
-|   |-- streamlit_support.py
-|   |-- validation.py
-|   `-- visualization.py
-|-- week7_outputs/
-|   `-- model_artifacts/
-|       |-- best_popularity_model.joblib
-|       |-- nearest_neighbors_recommender.joblib
-|       |-- recommender_catalog.csv
-|       |-- recommender_features.json
-|       `-- recommender_scaler.joblib
+|-- models/
+|   |-- best_popularity_model.joblib
+|   |-- nearest_neighbors_recommender.joblib
+|   |-- recommender_catalog.csv
+|   |-- recommender_features.json
+|   `-- recommender_scaler.joblib
+|-- python/
+|   `-- spotify_analysis.ipynb
+|-- sql/
+|   `-- README.md
 |-- .gitignore
 |-- README.md
 |-- requirements.txt
-|-- spotify_week7_analysis.py
 `-- streamlit_app.py
 ```
 
-`src/__init__.py` is also retained so `src` remains an explicit Python
-package.
+## Datasets
 
-## Fresh-clone installation
+The five accepted files under `data/` are cleaned, read-only inputs:
 
-Python 3.12 is the accepted version. From a fresh clone:
+- `data_clean.csv` contains 170,653 track-level rows used for EDA, regression,
+  and recommendation.
+- `data_by_artist_clean.csv` contains artist-level audio summaries.
+- `data_by_genres_clean.csv` contains genre-level profiles.
+- `data_by_year_clean.csv` contains annual audio summaries.
+- `data_w_genres_clean.csv` connects artist summaries with cleaned genres.
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
+The notebook reads these files without changing their encoding, rows, columns,
+or values. Any preparation happens only in memory.
 
-On macOS or Linux, use `python3.12 -m venv .venv` and
-`.venv/bin/python -m pip ...` instead.
+## Analysis workflow
 
-## Launch the Streamlit app
+Open `python/spotify_analysis.ipynb` to follow the project from configuration
+through dataset loading, validation, descriptive statistics, EDA, year and
+decade trends, correlations, regression comparison, recommender construction,
+validation, and final findings. Generated charts and tables are written to the
+ignored `generated_outputs/` folder.
 
-```powershell
-.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py
-```
+## Regression experiments
 
-Open the local URL printed by Streamlit, normally
-`http://localhost:8501`. The single focused page lets you:
+All experiments predict `popularity` with `test_size=0.2` and
+`random_state=42`. Ridge Regression uses `alpha=10.0`.
 
-- search by track or artist and select an exact catalog row;
-- request 5 to 15 unique audio-feature neighbors;
-- inspect rank, cosine similarity, year, and popularity;
-- view the exact result table; and
-- compare the seed profile with the recommendation average on a radar chart.
-
-The app loads the persisted feature contract, catalog, scaler, and
-`NearestNeighbors` model. Normal app use calls `transform` and `kneighbors`;
-it never calls `fit`, retrains a model, or writes an artifact.
-
-## Run the accepted analysis pipeline
-
-Use a generated output folder rather than overwriting the accepted artifacts:
-
-```powershell
-.\.venv\Scripts\python.exe spotify_week7_analysis.py --root . --output demo_outputs --skip-sql
-```
-
-The non-SQL run loads the five retained cleaned CSV files and generates EDA
-tables and figures, four regression experiments, a persisted best regression
-model, recommender demo/validation outputs, recommender artifacts, and a JSON
-run summary under `demo_outputs/`. That folder is ignored by Git and can be
-deleted after inspection.
-
-The five inputs are read-only:
-
-- `data_clean.csv` is the required track-level dataset.
-- `data_by_artist_clean.csv` supplies artist aggregates.
-- `data_by_genres_clean.csv` supplies genre profiles.
-- `data_by_year_clean.csv` supplies year aggregates.
-- `data_w_genres_clean.csv` supplies artist-to-genre data for the genre pivot.
-
-The pipeline never modifies these files. The auxiliary datasets are optional
-in the loader, but they are retained so the complete accepted output set is
-reproducible.
-
-## Persisted artifacts and recommender behavior
-
-`week7_outputs/model_artifacts/` is the only retained canonical output group:
-
-- `best_popularity_model.joblib` is the accepted regression model.
-- `recommender_scaler.joblib` is the fitted nine-feature `StandardScaler`.
-- `nearest_neighbors_recommender.joblib` is the fitted cosine-distance model.
-- `recommender_features.json` preserves the ordered feature contract.
-- `recommender_catalog.csv` aligns 170,653 catalog rows with fitted model
-  indexes and contains track identity, display metadata, and feature values.
-
-The ordered recommender features are acousticness, danceability, energy,
-instrumentalness, liveness, loudness, speechiness, tempo, and valence.
-Similarity is `1 - cosine distance`. Popularity is display context only and is
-not a recommender feature. Duplicate name-and-artist pairs and the seed track
-are excluded from results.
-
-## Accepted regression result
-
-| Feature set | Model | MAE | RMSE | R-squared |
+| Feature set | Model | MAE | RMSE | R² |
 |---|---|---:|---:|---:|
 | Audio Only | Linear Regression | 13.1118 | 16.3080 | 0.4442 |
 | Audio Only | Ridge Regression | 13.1119 | 16.3080 | 0.4442 |
 | Extended | Linear Regression | 7.9820 | 10.7308 | 0.7594 |
 | Extended | Ridge Regression | 7.9821 | 10.7309 | 0.7594 |
 
-The accepted final model is Extended Linear Regression. Its scikit-learn
-pipeline contains a scaler followed by `LinearRegression` and uses the ordered
-14-feature extended contract defined in `src/config.py`.
+The accepted best model is **Extended Linear Regression**.
 
-## SQL scope
+## Recommendation approach
 
-The supported public acceptance command uses `--skip-sql`. The project team's
-SQL Server report work remains a separate deliverable. `src/sql_analysis.py`
-is retained because the public analysis module imports it at startup and
-`src.pipeline` uses it when `--skip-sql` is omitted; it is an optional SQLite
-reference implementation, not the SQL Server submission.
+The content-based recommender represents every track with nine ordered audio
+features: acousticness, danceability, energy, instrumentalness, liveness,
+loudness, speechiness, tempo, and valence. A persisted `StandardScaler`
+standardizes the rows, and a cosine `NearestNeighbors` model finds similar
+profiles. The aligned catalog preserves a contiguous `_model_index` for all
+170,653 fitted rows. Results exclude the seed track and repeated track/artist
+pairs and return the exact requested Top N. Popularity is shown as context but
+is not used as a recommendation feature.
 
-## Streamlit Community Cloud
+## Streamlit application
 
-Connect this GitHub repository in Streamlit Community Cloud and set the entry
-point to `streamlit_app.py`. Select Python 3.12 in the deployment settings.
-`requirements.txt` and `.streamlit/config.toml` are discovered automatically,
-and the app requires no secrets. Keep all five files under
-`week7_outputs/model_artifacts/` in the deployed revision.
+`streamlit_app.py` is self-contained and loads the accepted artifacts without
+training. It supports:
+
+- track and artist search;
+- exact track selection by aligned catalog index;
+- 3 to 15 recommendations;
+- cosine similarity, popularity, and year display;
+- an exact result table; and
+- selected-track versus recommendation-average audio profiles.
+
+The app calls only persisted-model transformation and neighbor-query methods.
+It never calls `fit`, retrains a model, or writes an artifact.
+
+## Installation from a fresh clone
+
+Python 3.12 is the accepted version. From the repository root in PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+No removed `src/` package is required.
+
+## Run the notebook
+
+```powershell
+jupyter notebook python\spotify_analysis.ipynb
+```
+
+Run the cells in order. By default, the notebook loads accepted artifacts and
+creates only ignored charts and tables.
+
+## Run Streamlit
+
+```powershell
+python -m streamlit run streamlit_app.py
+```
+
+Open the local address printed by Streamlit, normally
+`http://localhost:8501`.
+
+## Model artifacts and rebuild safety
+
+The `models/` directory is the accepted immutable snapshot:
+
+- `best_popularity_model.joblib` is the Extended Linear Regression pipeline.
+- `recommender_scaler.joblib` is the fitted nine-feature scaler.
+- `nearest_neighbors_recommender.joblib` is the fitted cosine neighbor model.
+- `recommender_features.json` preserves feature order.
+- `recommender_catalog.csv` preserves fitted-row identity and alignment.
+
+At the top of the notebook, `REBUILD_MODELS = False` is the safe default. In
+this mode, accepted artifacts are loaded and nothing under `models/` is
+overwritten. Setting it to `True` trains the four regression experiments and
+the recommender, but writes new artifacts only under
+`generated_outputs/model_artifacts/`. Writing to `models/` additionally
+requires manually setting the separate `OVERWRITE_ACCEPTED_MODELS = True`
+confirmation. Use a temporary copy when testing rebuild mode.
+
+## SQL Server scope
+
+The final SQL report is performed separately in Microsoft SQL Server. The
+group will add SQL scripts and screenshots under `sql/`. The Python notebook
+does not claim that the SQL Server portion is complete.
 
 ## Troubleshooting
 
-- `ModuleNotFoundError`: run commands from the repository root with the same
-  interpreter used for `pip install -r requirements.txt`.
-- Missing recommender artifacts: confirm the five artifact filenames above
-  exist under `week7_outputs/model_artifacts/`; do not retrain them just to
-  launch the app.
-- Non-ASCII Windows path or redirected output errors: set
-  `$env:PYTHONUTF8 = "1"` and `$env:PYTHONIOENCODING = "utf-8"` before running.
-- Matplotlib cache warnings: set `$env:MPLCONFIGDIR` to a writable temporary
-  directory when running the pipeline in a restricted environment.
-- Plotly preview export errors: Kaleido is installed by the requirements, but
-  current Kaleido releases may also require a compatible local Chrome/Chromium
-  installation. The interactive HTML output is still generated if static
-  preview export is unavailable.
+- If a module is missing, activate `.venv` and reinstall with
+  `python -m pip install -r requirements.txt`.
+- Run notebook and Streamlit commands from the repository root so relative
+  `data/` and `models/` paths resolve correctly.
+- If Streamlit reports a missing artifact, confirm that all five documented
+  files are present under `models/`; do not retrain just to launch the app.
+- If PowerShell blocks activation, use
+  `Set-ExecutionPolicy -Scope Process Bypass`, then activate again.
+- Matplotlib and notebook outputs belong under ignored `generated_outputs/`;
+  deleting that folder does not remove accepted inputs or models.
