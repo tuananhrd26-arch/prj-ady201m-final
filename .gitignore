@@ -23,16 +23,25 @@ pyvenv.cfg
 .vscode/
 .idea/
 .audit_outputs/
+.cache/
 *.swp
 *.swo
 *.tmp
 *.bak
 *~
 
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
 # Raw data and old outputs
 data/
 eda_outputs/
 demo_outputs/
+pipeline_outputs/
+smoke_outputs/
 *_outputs_demo/
 .test_outputs/
 report_figures/

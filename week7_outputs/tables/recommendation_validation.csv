@@ -1,6 +1,0 @@
-﻿input_song,input_artists,input_model_index,recommendations_returned,label_matches_query_vector,input_track_absent,no_duplicate_recommendations,similarity_formula_valid,finite_similarity,rank_consecutive,validation_passed
-Dakiti,"['Bad Bunny', 'Jhay Cortez']",19611,10,True,True,True,True,True,True,True
-Mood (feat. iann dior),"['24kGoldn', 'iann dior']",19606,10,True,True,True,True,True,True,True
-Dynamite,['BTS'],19618,10,True,True,True,True,True,True,True
-Blinding Lights,['The Weeknd'],19616,10,True,True,True,True,True,True,True
-WAP (feat. Megan Thee Stallion),"['Cardi B', 'Megan Thee Stallion']",19608,10,True,True,True,True,True,True,True
